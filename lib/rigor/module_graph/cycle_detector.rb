@@ -103,7 +103,7 @@ module Rigor
                 sccs << scc
               end
               work.pop
-              parent = work.last && work.last.first
+              parent = work.last&.first
               lowlink[parent] = [lowlink[parent], lowlink[node]].min if parent
             end
           end

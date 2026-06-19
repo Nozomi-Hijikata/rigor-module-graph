@@ -34,7 +34,7 @@ class AnalyzerTest < Minitest::Test
       class Foo
       end
     RUBY
-    assert_empty edges.select { |e| e.kind == "inherits" }
+    assert_empty(edges.select { |e| e.kind == "inherits" })
   end
 
   def test_include_prepend_extend_edges

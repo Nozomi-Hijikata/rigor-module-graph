@@ -164,7 +164,7 @@ module Rigor
       end
 
       def escape_label(name)
-        name.gsub('"', '#quot;')
+        name.gsub('"', "#quot;")
       end
     end
   end

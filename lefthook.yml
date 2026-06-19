@@ -1,0 +1,37 @@
+# https://github.com/evilmartians/lefthook
+#
+# After bundling, wire the hooks into .git/hooks once:
+#
+#   bundle exec lefthook install
+#
+# Skip a hook ad-hoc with LEFTHOOK_EXCLUDE=<command_name>.
+
+pre-commit:
+  parallel: true
+  commands:
+    rubocop:
+      tags: lint
+      glob: "*.rb"
+      run: bundle exec rubocop --force-exclusion {staged_files}
+      stage_fixed: true # re-stage the file when rubocop autocorrects it
+    betterleaks:
+      tags: security
+      # `betterleaks git --pre-commit --staged` is the canonical
+      # pre-commit invocation per the project's own
+      # .pre-commit-hooks.yaml. --redact hides the secret value
+      # in the report so a screen-shared review of the hook output
+      # doesn't leak the very thing the scan caught.
+      run: betterleaks git --pre-commit --redact --staged --verbose
+    rigor:
+      tags: lint
+      glob: "*.rb"
+      # Rigor reads `.rigor.yml` from the project root and analyses
+      # the paths we hand it. Staged files only keeps the check
+      # fast (full-project scans run in CI / locally on demand).
+      run: bundle exec rigor check {staged_files}
+
+pre-push:
+  commands:
+    minitest:
+      tags: test
+      run: bundle exec rake test

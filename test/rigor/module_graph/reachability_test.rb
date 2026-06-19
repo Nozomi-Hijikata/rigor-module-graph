@@ -35,7 +35,7 @@ class ReachabilityTest < Minitest::Test
     ]
     filtered = Reachability.filter(edges, roots: ["A"], depth: 1)
     # depth 1: A → B reachable, C not yet.
-    assert_equal [%w[A B]], filtered.map { |e| [e.from, e.to] }
+    assert_equal([%w[A B]], filtered.map { |e| [e.from, e.to] })
   end
 
   def test_direction_out_only_follows_outgoing

@@ -79,7 +79,7 @@ class StatsTest < Minitest::Test
     billing = result.first
     # The two `Billing::Invoice` mentions (one with leading
     # `::`) should count as one node, not two.
-    assert_equal 3, billing.nodes  # Invoice, Payment, Refund
+    assert_equal 3, billing.nodes # Invoice, Payment, Refund
     assert_equal 2, billing.internal
   end
 

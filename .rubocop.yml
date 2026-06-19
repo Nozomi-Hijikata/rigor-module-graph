@@ -1,0 +1,125 @@
+plugins:
+  - rubocop-rake
+  - rubocop-minitest
+
+AllCops:
+  TargetRubyVersion: 4.0
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - "vendor/**/*"
+    - "tmp/**/*"
+    - "doc/**/*"
+    - "examples/**/.rigor/**/*"
+    - "test/fixtures/**/*"
+    - "examples/billing/app/**/*"
+
+# `lib/rigor-module-graph.rb` is the gem's entry point. Bundler
+# requires the file by gem name, so the hyphenated filename is
+# load-bearing; the cop's snake_case preference would break the
+# `require "rigor-module-graph"` contract.
+Naming/FileName:
+  Exclude:
+    - "lib/rigor-module-graph.rb"
+
+# Snake-style block comments and HEREDOC layouts are common
+# enough across this gem that the LineLength cop fires constantly
+# without buying much.
+Layout/LineLength:
+  Max: 120
+
+# This gem uses double quotes throughout.
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+
+# `next [] unless …` is the canonical guard in our Prism walkers.
+Style/IfUnlessModifier:
+  Enabled: false
+
+# Don't force frozen_string_literal — every lib file already has
+# the magic comment.
+Style/FrozenStringLiteralComment:
+  EnforcedStyle: never
+  Exclude:
+    - "lib/**/*.rb"
+    - "exe/*"
+    - "test/**/*.rb"
+    - "*.gemspec"
+
+# We use `MEMO ||= compute` widely as a memoisation idiom.
+Naming/MemoizedInstanceVariableName:
+  Enabled: false
+
+# Snapshot tests use a one-method-many-asserts style that the
+# default 25-LOC limit punishes without good reason.
+Metrics/MethodLength:
+  Max: 60
+
+Metrics/ClassLength:
+  Max: 400
+
+Metrics/ModuleLength:
+  Max: 400
+
+Metrics/AbcSize:
+  Max: 60
+
+Metrics/BlockLength:
+  Max: 40
+  Exclude:
+    - "test/**/*"
+    - "*.gemspec"
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+
+Metrics/PerceivedComplexity:
+  Max: 15
+
+Metrics/ParameterLists:
+  Max: 8
+
+# Minitest plugin is happy to enforce style preferences we'd
+# rather not commit to.
+Minitest/EmptyLineBeforeAssertionMethods:
+  Enabled: false
+Minitest/MultipleAssertions:
+  Enabled: false
+
+# Our string-builder pattern (`out << "  " << name`) is more
+# readable than the autocorrect target for the kind of multi-line
+# DOT / Mermaid rendering this gem does.
+Style/StringConcatenation:
+  Enabled: false
+
+Style/Documentation:
+  Enabled: false
+
+# We use `+""` to start a mutable buffer in renderers; the cop's
+# rewrite to `String.new` is louder for the same intent.
+Style/RedundantInterpolationUnfreeze:
+  Enabled: false
+
+# Data.define inheritance is the canonical RDoc-visible form.
+Style/DataInheritance:
+  Enabled: false
+
+# `next [] unless` and `next unless` are clearer than an inverted
+# `if` in our short Prism walkers.
+Style/SoleNestedConditional:
+  Enabled: false
+
+# `prism` is a default gem; we still require it explicitly so
+# load-order is predictable.
+Lint/RedundantRequireStatement:
+  Enabled: false
+
+# We pass `&` block-forwarding to wrap Prism node walkers;
+# converting them to anonymous-block syntax loses the helpful
+# `&block` name in stack traces.
+Style/ArgumentsForwarding:
+  Enabled: false
+Naming/BlockForwarding:
+  Enabled: false

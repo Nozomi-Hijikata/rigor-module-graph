@@ -12,7 +12,7 @@ class PackwerkOverlayTest < Minitest::Test
     Dir.mktmpdir do |tmp|
       FileUtils.mkdir_p(File.join(tmp, "app/models"))
       overlay = PackwerkOverlay.discover(tmp)
-      refute overlay.any?
+      refute_predicate overlay, :any?
       assert_empty overlay.packages
     end
   end

@@ -1,0 +1,9 @@
+target_ruby: '4.0'
+paths:
+  - lib
+exclude:
+  - exe
+  - test
+  - examples
+plugins: []
+disable: []

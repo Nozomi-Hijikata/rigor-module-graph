@@ -68,7 +68,7 @@ module Rigor
         # users see the familiar label.
         return "." if pkg_root == project_root
 
-        rel = pkg_root.sub(/\A#{Regexp.escape(project_root)}\/?/, "")
+        rel = pkg_root.sub(%r{\A#{Regexp.escape(project_root)}/?}, "")
         rel.empty? ? "." : rel
       end
 

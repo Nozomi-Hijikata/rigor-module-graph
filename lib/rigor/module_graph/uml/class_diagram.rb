@@ -104,6 +104,7 @@ module Rigor
           nodes.each do |row|
             owner = row.owner
             next if owner.nil?
+
             visibility = row.visibility || "public"
             next unless visibilities.include?(visibility)
 

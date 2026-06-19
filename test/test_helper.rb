@@ -47,12 +47,12 @@ class FakeNodeContext
   end
 
   def enclosing_module
-    @ancestors.reverse.find do |n|
+    @ancestors.rfind do |n|
       n.is_a?(Prism::ClassNode) || n.is_a?(Prism::ModuleNode)
     end
   end
 
   def enclosing_def
-    @ancestors.reverse.find { |n| n.is_a?(Prism::DefNode) }
+    @ancestors.rfind { |n| n.is_a?(Prism::DefNode) }
   end
 end

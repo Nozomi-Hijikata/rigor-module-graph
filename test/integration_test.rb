@@ -22,7 +22,7 @@ class IntegrationTest < Minitest::Test
       copy_fixture(tmp)
       run_collect(tmp)
       edges_file = File.join(tmp, ".rigor/module_graph/edges.jsonl")
-      assert File.exist?(edges_file), "expected #{edges_file} to be written"
+      assert_path_exists edges_file, "expected #{edges_file} to be written"
       assert_snapshot "integration/edges", normalised(edges_file, tmp)
     end
   end
@@ -52,9 +52,9 @@ class IntegrationTest < Minitest::Test
     env = { "BUNDLE_GEMFILE" => File.join(GEM_ROOT, "Gemfile") }
     exe = File.join(GEM_ROOT, "exe/rigor-module-graph")
     out, err, status = Open3.capture3(env, "bundle", "exec", exe, "collect", chdir: cwd)
-    unless status.success?
-      flunk "collect failed (exit #{status.exitstatus})\nSTDOUT:\n#{out}\nSTDERR:\n#{err}"
-    end
+    return if status.success?
+
+    flunk "collect failed (exit #{status.exitstatus})\nSTDOUT:\n#{out}\nSTDERR:\n#{err}"
   end
 
   # Strip volatile bits before snapshotting:

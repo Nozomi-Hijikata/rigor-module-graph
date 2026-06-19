@@ -277,9 +277,30 @@ The renderers dedup by `(from, to, kind, confidence)` so two
 
 ```sh
 bundle install
+bundle exec lefthook install      # wire pre-commit / pre-push hooks
 bundle exec rake test
 UPDATE_SNAPSHOTS=1 bundle exec rake test   # to refresh snapshots
 ```
+
+### Git hooks
+
+`lefthook.yml` wires four checks. The split is "fast on every
+commit, full suite on push":
+
+| hook       | command       | scope                          |
+|------------|---------------|--------------------------------|
+| pre-commit | rubocop       | staged Ruby files              |
+| pre-commit | betterleaks   | staged content, secret scan    |
+| pre-commit | rigor check   | staged Ruby files              |
+| pre-push   | minitest      | full `rake test`               |
+
+The three pre-commit checks run in parallel; on this repo they
+finish in ~1 second together. `betterleaks` is a binary (`brew
+install betterleaks` on macOS) — the others come in through
+Bundler. `rubocop` re-stages autocorrected files.
+
+Skip a hook ad-hoc with `LEFTHOOK_EXCLUDE=<command>` (e.g.
+`LEFTHOOK_EXCLUDE=rigor git commit ...`).
 
 The test suite covers:
 

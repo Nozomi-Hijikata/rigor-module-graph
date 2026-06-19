@@ -34,7 +34,7 @@ module Rigor
         return word.dup if word.empty?
         return preserve_case(IRREGULAR_PLURALS[downcased], word) if IRREGULAR_PLURALS.key?(downcased)
         return word[0..-4] + "y" if word =~ /ies\z/i && word.size > 3
-        return word[0..-3] if word =~ /ses\z/i  # buses → bus, classes → clas... we accept loss
+        return word[0..-3] if word =~ /ses\z/i # buses → bus, classes → clas... we accept loss
         return word[0..-2] if word.end_with?("s") && !word.end_with?("ss")
 
         word.dup

@@ -179,7 +179,7 @@ module Rigor
           payload.fetch("diagnostics", [])
         rescue Errno::ENOENT
           raise CollectError, "rigor binary not found: #{cmd.first.inspect}. " \
-            "Install rigortype or set RIGOR_CMD."
+                              "Install rigortype or set RIGOR_CMD."
         rescue JSON::ParserError => e
           raise CollectError, "rigor produced invalid JSON: #{e.message}\n#{stdout_str}"
         end
@@ -490,7 +490,8 @@ module Rigor
 
           overlay = PackwerkOverlay.discover(@options[:package])
           unless overlay.any?
-            @stderr.puts "rigor-module-graph view: no package.yml found under #{@options[:package].inspect}; falling back to namespace collapse"
+            @stderr.puts "rigor-module-graph view: no package.yml found under " \
+                         "#{@options[:package].inspect}; falling back to namespace collapse"
             return nil
           end
 
@@ -806,7 +807,7 @@ module Rigor
 
           out = +""
           out << format_row(HEADERS, widths) << "\n"
-          out << "-" * widths.sum { |w| w + 2 } << "\n"
+          out << ("-" * widths.sum { |w| w + 2 }) << "\n"
           rows.each { |row| out << format_row(row, widths) << "\n" }
           out
         end
