@@ -8,7 +8,9 @@
       mermaid.initialize({
         startOnLoad: true,
         securityLevel: "loose",
-        maxTextSize: 5_000_000
+        maxTextSize: 5_000_000,
+        maxEdges: 50_000,
+        flowchart: { useMaxWidth: false, htmlLabels: true }
       });
     </script>
     <style>
@@ -16,53 +18,69 @@
       h1 { margin-top: 0; }
       .meta { color: #64748b; margin-bottom: 1.5rem; }
       .card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+      .legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+      .legend span { padding: 0.25rem 0.75rem; border-radius: 999px; color: white; font-size: 12px; }
+      .legend .inherits { background: #0f172a; }
+      .legend .include { background: #1d4ed8; }
+      .legend .prepend { background: #9333ea; }
+      .legend .extend { background: #0f766e; }
+      .legend .const_ref { background: #94a3b8; color: #0f172a; }
+      .legend .unresolved { background: #fef3c7; color: #0f172a; }
     </style>
   </head>
   <body>
     <h1>rigor-module-graph: billing class diagram</h1>
-    <p class="meta">Generated from <code>examples/billing/app</code> via <code>rigor-module-graph class-diagram</code>. Embedded inline so it works over <code>file://</code>.</p>
-    <div class="card">
+          <p class="meta">Generated from examples/billing/app</p>
+        <div class="card">
       <pre class="mermaid">
 classDiagram
-  class Address
-  class ApplicationRecord
-  class Auditable["Auditable «module»"]
-  class Billing["Billing «module»"]
-  class Billing__Customer["Billing::Customer"]
-  class Billing__Customer {
-    +preferred_language : accessor
-    +display_name()
-    -normalize_email()
-  }
-  class Billing__Invoice["Billing::Invoice"]
-  class Billing__LineItem["Billing::LineItem"]
-  class Billing__Payment["Billing::Payment"]
-  class Discountable["Discountable «module»"]
-  class Invoice
-  class Searchable["Searchable «module»"]
-  class Tag
-  class Tenant
-  class Tracked["Tracked «module»"]
-
-  ApplicationRecord <|-- Billing__Customer : inherits
-  Auditable <|.. Billing__Customer : include
-  Invoice "1" -- "*" Billing__Customer : has_many
-  Address "1" -- "1" Billing__Customer : has_one
-  Tenant "*" -- "1" Billing__Customer : belongs_to
-  Tag "*" -- "*" Billing__Customer : has_and_belongs_to_many
-  ApplicationRecord <|-- Billing__Invoice : inherits
-  Auditable <|.. Billing__Invoice : include
-  Discountable <|.. Billing__Invoice : include
-  Tracked <|.. Billing__Invoice : prepend
-  Searchable <|.. Billing__Invoice : extend
-  ApplicationRecord <|-- Billing__LineItem : inherits
-  Auditable <|.. Billing__LineItem : include
-  Searchable <|.. Billing__LineItem : extend
-  ApplicationRecord <|-- Billing__Payment : inherits
-  Auditable <|.. Billing__Payment : include
-  Tracked <|.. Billing__Payment : prepend
-  Auditable <|.. Discountable : include
+    class Address
+    class ApplicationRecord
+    class Auditable["Auditable «module»"]
+    class Billing["Billing «module»"]
+    class Billing__Customer["Billing::Customer"]
+    class Billing__Customer {
+      +preferred_language : accessor
+      +display_name()
+      -normalize_email()
+    }
+    class Billing__Invoice["Billing::Invoice"]
+    class Billing__LineItem["Billing::LineItem"]
+    class Billing__Payment["Billing::Payment"]
+    class Discountable["Discountable «module»"]
+    class Invoice
+    class Searchable["Searchable «module»"]
+    class Tag
+    class Tenant
+    class Tracked["Tracked «module»"]
+  
+    ApplicationRecord <|-- Billing__Customer : inherits
+    Auditable <|.. Billing__Customer : include
+    Invoice "1" -- "*" Billing__Customer : has_many
+    Address "1" -- "1" Billing__Customer : has_one
+    Tenant "*" -- "1" Billing__Customer : belongs_to
+    Tag "*" -- "*" Billing__Customer : has_and_belongs_to_many
+    ApplicationRecord <|-- Billing__Invoice : inherits
+    Auditable <|.. Billing__Invoice : include
+    Discountable <|.. Billing__Invoice : include
+    Tracked <|.. Billing__Invoice : prepend
+    Searchable <|.. Billing__Invoice : extend
+    ApplicationRecord <|-- Billing__LineItem : inherits
+    Auditable <|.. Billing__LineItem : include
+    Searchable <|.. Billing__LineItem : extend
+    ApplicationRecord <|-- Billing__Payment : inherits
+    Auditable <|.. Billing__Payment : include
+    Tracked <|.. Billing__Payment : prepend
+    Auditable <|.. Discountable : include
       </pre>
+    </div>
+    <div class="legend">
+      <span class="inherits">inherits</span>
+      <span class="include">include</span>
+      <span class="prepend">prepend</span>
+      <span class="extend">extend</span>
+      <span class="const_ref">const_ref</span>
+      <span class="unresolved">unresolved</span>
     </div>
   </body>
 </html>

@@ -165,6 +165,15 @@ Useful flags:
 # Don't open the browser (just write the HTML)
 rigor-module-graph view --no-open
 
+# Pick a different output format — html (default) opens a viewer
+# in the browser; everything else streams to stdout unless `-o`
+# is given.
+rigor-module-graph view --no-open --output mermaid       > graph.mmd
+rigor-module-graph view --no-open --output dot           > graph.dot
+rigor-module-graph view --no-open --output svg           > graph.svg
+rigor-module-graph view --no-open --output class-diagram > class.mmd
+rigor-module-graph view --output svg -o graph.svg
+
 # Focus on what's around one or a few constants (Mermaid can't
 # render 1000+-node graphs cleanly — this is the escape hatch)
 rigor-module-graph view --from Article --depth 5

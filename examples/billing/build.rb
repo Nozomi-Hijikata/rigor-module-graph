@@ -1,22 +1,20 @@
 #!/usr/bin/env ruby
-# frozen_string_literal: true
 
 # Regenerate the billing example's committed artefacts:
 # graph.svg (Graphviz) and index.html (the standalone Mermaid
-# viewer). The intermediate edges.jsonl / graph.mmd / graph.dot
-# live under .rigor/ and are gitignored.
+# viewer). The intermediate edges.jsonl / nodes.jsonl live under
+# .rigor/ and are gitignored.
 #
 # Run from any working directory:
 #
 #   ruby examples/billing/build.rb
 #   bundle exec ruby examples/billing/build.rb
 #
-# Day-to-day, prefer `rigor-module-graph view` for a one-shot
-# browser preview of any project. This script exists so the repo
-# stays self-contained for GitHub viewers.
+# Day-to-day, prefer `rigor-module-graph view --output <fmt>`
+# directly. This script exists so the repo stays self-contained
+# for GitHub viewers.
 
 require "fileutils"
-require "open3"
 
 HERE = File.expand_path(__dir__)
 GEM_ROOT = File.expand_path("../..", HERE)
@@ -30,53 +28,50 @@ def step(label)
   yield
 end
 
-def sh_to_file!(*cmd, out:)
-  stdout, stderr, status = Open3.capture3(*cmd)
-  raise "command failed (#{status.exitstatus}): #{cmd.inspect}\n#{stderr}" unless status.success?
-
-  File.write(out, stdout)
-end
-
-step "collect (rigor check + filter)" do
-  system("bundle", "exec", EXE, "collect", exception: true)
-end
-
-step "render mermaid (collapsed under Billing)" do
-  sh_to_file!(
-    "bundle", "exec", EXE, "mermaid",
+def view!(format, save:, extra: [])
+  system(
+    "bundle", "exec", EXE, "view",
+    "--no-open",
+    "--output", format,
     "--collapse", "Billing",
-    ".rigor/module_graph/edges.jsonl",
-    out: "graph.mmd"
+    "-o", save,
+    *extra,
+    exception: true
   )
 end
 
-step "render dot (collapsed under Billing)" do
-  sh_to_file!(
-    "bundle", "exec", EXE, "dot",
-    "--collapse", "Billing",
-    ".rigor/module_graph/edges.jsonl",
-    out: "graph.dot"
-  )
+step "html viewer → index.html" do
+  view!("html", save: "index.html")
 end
 
-if `command -v dot`.strip != ""
-  step "render svg via Graphviz" do
-    system("dot", "-Tsvg", "graph.dot", "-o", "graph.svg", exception: true)
+step "graphviz svg → graph.svg" do
+  if `command -v dot`.strip == ""
+    warn "    skip (graphviz `dot` not on PATH)"
+  else
+    view!("svg", save: "graph.svg")
   end
-else
-  warn "==> skip svg (graphviz `dot` not on PATH)"
 end
 
-step "rebuild index.html (Mermaid embedded inline)" do
+step "mermaid class diagram → class-diagram.html (embedded)" do
+  # Wraps the same standalone HTML shell HtmlView uses, just with
+  # the classDiagram body — keeps the file directly openable.
   $LOAD_PATH.unshift File.join(GEM_ROOT, "lib")
   require "rigor/module_graph/html_view"
+  require "open3"
+
+  mmd, _stderr, status = Open3.capture3(
+    "bundle", "exec", EXE, "view",
+    "--no-open", "--output", "class-diagram",
+    "--collapse", "Billing"
+  )
+  raise "class-diagram render failed" unless status.success?
 
   html = Rigor::ModuleGraph::HtmlView.render(
-    title: "rigor-module-graph: billing example",
+    title: "rigor-module-graph: billing class diagram",
     subtitle: "Generated from examples/billing/app",
-    mermaid_source: File.read("graph.mmd")
+    mermaid_source: mmd
   )
-  File.write("index.html", html)
+  File.write("class-diagram.html", html)
 end
 
 warn "==> done. open #{File.join(HERE, "index.html")} in a browser."

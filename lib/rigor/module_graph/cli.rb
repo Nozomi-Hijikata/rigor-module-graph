@@ -335,11 +335,22 @@ module Rigor
         # projects.
         SUBTITLE_COLLAPSE_PREVIEW = 6
 
+        # The supported output formats, in roughly increasing
+        # "wrapping" order: html embeds mermaid; svg embeds dot;
+        # the rest are raw text.
+        FORMATS = %w[html mermaid dot svg class-diagram].freeze
+
+        # Default file destination when format is html and the
+        # user didn't override with -o. Non-html formats default to
+        # stdout.
+        DEFAULT_HTML_OUTPUT = ".rigor/module_graph/view.html"
+
         def initialize(stdout:, stderr:)
           @stdout = stdout
           @stderr = stderr
           @options = {
-            output: DEFAULT_OUTPUT,
+            format: "html",
+            output: nil,
             cache: false,
             rigor_cmd: ENV.fetch("RIGOR_CMD", "rigor"),
             open: true,
@@ -357,9 +368,8 @@ module Rigor
           parser = build_parser
           paths = parser.parse(argv)
 
-          ensure_output_dir
           runner = RigorRunner.new(rigor_cmd: @options[:rigor_cmd], cache: @options[:cache])
-          edges = runner.edges_for(paths)
+          edges, nodes = runner.analyse(paths)
           edges = apply_filters(
             edges,
             kinds: @options[:kinds],
@@ -371,33 +381,106 @@ module Rigor
           groups = package_groups(edges)
           collapse = groups ? [] : effective_collapse(edges)
 
-          mermaid = Mermaid.render(edges, collapse: collapse, groups: groups)
-          html = HtmlView.render(
-            title: "rigor-module-graph: #{File.basename(Dir.pwd)}",
-            subtitle: render_subtitle(edges, collapse, groups),
-            mermaid_source: mermaid
-          )
-          File.write(@options[:output], html)
-          @stderr.puts "rigor-module-graph: wrote #{edges.size} edge(s) to #{@options[:output]}"
-          open_in_browser(@options[:output]) if @options[:open]
+          payload, binary = render_payload(edges, nodes, collapse, groups)
+          deliver(payload, binary: binary, edges: edges)
           0
         rescue OptionParser::ParseError => e
           @stderr.puts "rigor-module-graph view: #{e.message}"
           2
-        rescue CollectError => e
+        rescue CollectError, RenderError => e
           @stderr.puts "rigor-module-graph view: #{e.message}"
           1
+        end
+
+        class RenderError < StandardError; end
+
+        # Builds the rendered payload for the chosen format and
+        # signals whether the bytes are binary (svg via Graphviz
+        # can return a non-UTF-8 image stream).
+        def render_payload(edges, nodes, collapse, groups)
+          case @options[:format]
+          when "html"
+            mermaid = Mermaid.render(edges, collapse: collapse, groups: groups)
+            html = HtmlView.render(
+              title: "rigor-module-graph: #{File.basename(Dir.pwd)}",
+              subtitle: render_subtitle(edges, collapse, groups),
+              mermaid_source: mermaid
+            )
+            [html, false]
+          when "mermaid"
+            [Mermaid.render(edges, collapse: collapse, groups: groups), false]
+          when "dot"
+            [Dot.render(edges, collapse: collapse, groups: groups), false]
+          when "svg"
+            [graphviz_svg(Dot.render(edges, collapse: collapse, groups: groups)), true]
+          when "class-diagram"
+            [Uml::ClassDiagram.render(edges, nodes), false]
+          end
+        end
+
+        # Shell out to Graphviz `dot -Tsvg`. Surfacing the binary
+        # check as a clear error keeps the message friendlier than
+        # the raw `Errno::ENOENT` Open3 would propagate.
+        def graphviz_svg(dot_source)
+          stdout_str, stderr_str, status = Open3.capture3("dot", "-Tsvg", stdin_data: dot_source)
+          unless status.success?
+            raise RenderError, "graphviz `dot` failed (exit #{status.exitstatus}): #{stderr_str}"
+          end
+
+          stdout_str
+        rescue Errno::ENOENT
+          raise RenderError, "graphviz `dot` not found on PATH; install via " \
+                             "`brew install graphviz` (macOS) or your distro's package manager"
+        end
+
+        # Writes the payload to the configured destination and
+        # opens the browser when the html-default flow applies.
+        def deliver(payload, binary:, edges:)
+          destination = effective_output_path
+          if destination.nil?
+            if binary
+              @stdout.binmode
+            end
+            @stdout.write(payload)
+            return
+          end
+
+          dir = File.dirname(destination)
+          FileUtils.mkdir_p(dir) unless dir.empty? || dir == "."
+          mode = binary ? "wb" : "w"
+          File.open(destination, mode) { |io| io.write(payload) }
+          @stderr.puts "rigor-module-graph: wrote #{edges.size} edge(s) to #{destination}"
+          open_in_browser(destination) if html? && @options[:open]
+        end
+
+        # Resolve the output path. `-o PATH` always wins. With no
+        # explicit path, html falls back to `.rigor/module_graph/
+        # view.html`; every other format streams to stdout.
+        def effective_output_path
+          return @options[:output] if @options[:output]
+          return DEFAULT_HTML_OUTPUT if html?
+
+          nil
+        end
+
+        def html?
+          @options[:format] == "html"
         end
 
         def build_parser
           OptionParser.new do |opts|
             opts.banner = "Usage: rigor-module-graph view [options] [PATHS...]"
-            opts.on("-o", "--output PATH",
-                    "Write HTML to PATH (default: #{DEFAULT_OUTPUT})") do |path|
+            opts.on("--output FORMAT", FORMATS,
+                    "Output format (#{FORMATS.join("|")}; default: html). " \
+                    "Non-html streams to stdout unless -o is given.") do |fmt|
+              @options[:format] = fmt
+            end
+            opts.on("-o", "--save PATH",
+                    "Write to PATH instead of stdout / the default html location") do |path|
               @options[:output] = path
             end
             opts.on("--[no-]open",
-                    "Open the HTML in a browser (default: true)") do |flag|
+                    "Open the html in a browser (default: true; ignored for non-html)") do |flag|
               @options[:open] = flag
             end
             opts.on("--collapse PREFIXES", Array,
@@ -496,11 +579,6 @@ module Rigor
           end
 
           overlay.groups_for(edges)
-        end
-
-        def ensure_output_dir
-          dir = File.dirname(@options[:output])
-          FileUtils.mkdir_p(dir) unless dir.empty?
         end
 
         def open_in_browser(path)

@@ -98,6 +98,30 @@ class ViewTest < Minitest::Test
     assert_includes subtitle, "packages: packages/auth, packages/billing"
   end
 
+  def test_effective_output_path_for_html_defaults_to_well_known_location
+    view = build_view
+    view.instance_variable_get(:@options)[:format] = "html"
+    assert_equal CLI::View::DEFAULT_HTML_OUTPUT, view.effective_output_path
+  end
+
+  def test_effective_output_path_for_non_html_is_nil_for_stdout
+    view = build_view
+    %w[mermaid dot svg class-diagram].each do |fmt|
+      view.instance_variable_get(:@options)[:format] = fmt
+      assert_nil view.effective_output_path,
+                 "#{fmt} should stream to stdout when no -o given"
+    end
+  end
+
+  def test_explicit_save_path_wins_over_default_for_every_format
+    %w[html mermaid dot svg class-diagram].each do |fmt|
+      view = build_view
+      view.instance_variable_get(:@options)[:format] = fmt
+      view.instance_variable_get(:@options)[:output] = "/tmp/out"
+      assert_equal "/tmp/out", view.effective_output_path
+    end
+  end
+
   def build_view(collapse: nil)
     view = CLI::View.new(stdout: StringIO.new, stderr: StringIO.new)
     view.instance_variable_get(:@options)[:collapse] = collapse
