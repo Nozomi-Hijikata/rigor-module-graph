@@ -1,11 +1,35 @@
 # frozen_string_literal: true
 
 require "rake/testtask"
+require "rdoc/task"
 
 Rake::TestTask.new(:test) do |t|
   t.libs << "test"
   t.libs << "lib"
   t.test_files = FileList["test/**/*_test.rb"]
+end
+
+RDoc::Task.new do |rdoc|
+  rdoc.main = "README.md"
+  rdoc.title = "rigor-module-graph"
+  rdoc.rdoc_dir = "doc"
+  rdoc.rdoc_files.include("README.md", "lib/**/*.rb")
+  rdoc.options << "--markup" << "rdoc"
+end
+
+namespace :rdoc do
+  desc "Generate RDoc and open the index in a browser (macOS / xdg-open)"
+  task preview: :rdoc do
+    index = File.expand_path("doc/index.html", __dir__)
+    opener = ENV["BROWSER"] ||
+             (RUBY_PLATFORM.include?("darwin") ? "open" : "xdg-open")
+    sh opener, index
+  end
+
+  desc "Serve RDoc on http://localhost:8808 via `ri --server`"
+  task :server do
+    sh "ri", "--server=8808"
+  end
 end
 
 task default: :test

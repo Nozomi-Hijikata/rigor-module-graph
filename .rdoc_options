@@ -1,0 +1,16 @@
+---
+encoding: UTF-8
+markup: rdoc
+main_page: README.md
+title: rigor-module-graph
+template: darkfish
+hyperlink_all: false
+line_numbers: false
+visibility: public
+exclude:
+  - "^test/"
+  - "^tmp/"
+  - "^doc/"
+  - "^vendor/"
+  - "^\\.rigor/"
+  - "^examples/.*/\\.rigor/"

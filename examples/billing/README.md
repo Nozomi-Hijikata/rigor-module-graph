@@ -10,11 +10,11 @@ From the gem root:
 
 ```sh
 bundle install
-./examples/billing/build.sh
+bundle exec ruby examples/billing/build.rb
 open examples/billing/index.html
 ```
 
-`build.sh` does:
+`build.rb` does:
 
 1. `rigor-module-graph collect` — runs `rigor check --format json
    --no-cache` against `app/` and writes

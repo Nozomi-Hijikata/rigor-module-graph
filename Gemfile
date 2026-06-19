@@ -11,4 +11,5 @@ group :development, :test do
   gem "minitest", "~> 5.20"
   gem "minitest-snapshot", "~> 0.1"
   gem "rake", "~> 13.0"
+  gem "rdoc", "~> 6.0"
 end

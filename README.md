@@ -207,10 +207,28 @@ UPDATE_SNAPSHOTS=1 bundle exec rake test   # to refresh snapshots
 
 The test suite covers:
 
-- `ConstantName`, `Edge`, `Analyzer`, `CycleDetector` as unit tests
+- `ConstantName`, `Edge`, `Analyzer`, `CycleDetector`,
+  `ZeitwerkResolver` as unit tests
 - `Dot`, `Mermaid` rendering via `minitest-snapshot`
 - An integration test that boots the real `rigor` binary against
   `test/fixtures/rails_app/` and snapshots the edges JSONL
+
+## Documentation
+
+The public API is documented with RDoc. Generate it locally and
+browse:
+
+```sh
+bundle exec rake rdoc            # writes ./doc
+bundle exec rake rdoc:preview    # writes ./doc and opens index.html
+bundle exec rake rdoc:server     # serves on http://localhost:8808 via `ri --server`
+```
+
+`rake rdoc:preview` honours `$BROWSER` if set; otherwise it falls
+back to `open` on macOS and `xdg-open` elsewhere.
+
+Online docs follow whatever rubydoc.info publishes from the latest
+release: <https://rubydoc.info/gems/rigor-module-graph>.
 
 ## Compatibility
 

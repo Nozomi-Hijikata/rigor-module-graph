@@ -20,7 +20,13 @@ module Rigor
     module CycleDetector
       module_function
 
-      Cycle = Data.define(:nodes) do
+      # One detected cycle, expressed as the list of node names
+      # along it. Always rotated so the lexicographically smallest
+      # name comes first, so the rendered output is stable across
+      # runs.
+      class Cycle < Data.define(:nodes)
+        # Render the cycle as +A -> B -> C -> A+ (note the closing
+        # repeat of the first node so the round-trip is obvious).
         def to_s
           nodes.join(" -> ") + " -> " + nodes.first
         end

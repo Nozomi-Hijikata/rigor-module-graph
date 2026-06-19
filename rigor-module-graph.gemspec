@@ -22,6 +22,12 @@ Gem::Specification.new do |spec|
   spec.bindir = "exe"
   spec.executables = ["rigor-module-graph"]
   spec.require_paths = ["lib"]
+  spec.metadata = {
+    "documentation_uri" => "https://rubydoc.info/gems/rigor-module-graph",
+    "rubygems_mfa_required" => "true"
+  }
+  spec.rdoc_options = ["--main", "README.md", "--markup", "rdoc"]
+  spec.extra_rdoc_files = ["README.md"]
 
   spec.add_dependency "rigortype", "~> 0.2.1"
   # rigortype 0.2.1 declares rbs >= 3.0, < 5.0, but uses an API
