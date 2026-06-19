@@ -374,9 +374,25 @@ namespace collapse は DOT の `subgraph cluster_...` で表現する。
 - macOS `/tmp` ↔ `/private/tmp` symlink を透過的に扱うため、package root も edge.path も `realpath` で正規化（存在しない path は最深ancestor のみ resolve して残りを reattach）
 - Dot / Mermaid の cluster identifier は `[A-Za-z0-9_]+` に sanitize（`packages/billing` → `cluster_packages_billing`）。ラベルは元の文字列を保ったまま使う
 
-### Phase 5: UML クラス図出力
+### Phase 5: UML クラス図出力 ✅（2026-06-19 完了）
 
-今回作っている graph は **UML 的なクラス図の材料** になる。ただし現計画のままだとまず出せるのは「依存グラフ寄りのクラス図」。
+今回作っている graph は **UML 的なクラス図の材料** になる。MVP として、依存グラフに node metadata を足して Mermaid `classDiagram` を出すところまで実装した。
+
+達成状況サマリ:
+
+- 5a node metadata 抽出（`nodes.jsonl`） → ✅
+- 5b Rails association edge（cardinality 付き） → ✅
+- 5c `Mermaid::ClassDiagram` レンダラ + `class-diagram` サブコマンド → ✅
+- 5d visibility / scope の filter → ✅ (`--no-methods`, `--no-attributes`, `--public-only`, `--no-private`)
+
+実装上の決定 / トラップ:
+
+- `<<module>>` annotation を試したが、Mermaid 10.x が `class Foo["Label"]` 形と annotation の併存を silently reject する。namespaced constant 用の label を捨てるよりは annotation を捨てた方が graph の有用性が上なので、module には `«module»` の label 接尾辞で代用
+- visibility 追跡は bare keyword (`public` / `protected` / `private`) のみ。`private :foo, :bar` の symbol 形と `class << self` は未対応 — `public` として扱う
+- inflector は最小実装。irregular plural（`mice`, `people` ほか）は事前定義のテーブルでだけカバー。実用には association 側で `class_name: "Foo"` 上書きで対応する想定
+- `nodes.jsonl` の dedup key は `[kind, owner, name]`。class re-open や method 再定義はひとつに畳む
+
+
 
 すぐ生やせるもの（Phase 1〜4 で揃った材料）:
 

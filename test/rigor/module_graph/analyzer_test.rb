@@ -163,6 +163,49 @@ class AnalyzerTest < Minitest::Test
     assert_empty refs
   end
 
+  def test_association_has_many_infers_singular_class_name
+    edges = analyze(<<~RUBY)
+      class User < ApplicationRecord
+        has_many :invoices
+      end
+    RUBY
+    assoc = edges.select { |e| e.kind == "has_many" }
+    assert_equal 1, assoc.size
+    assert_equal "User", assoc.first.from
+    assert_equal "Invoice", assoc.first.to
+    assert_equal "invoices", assoc.first.raw
+  end
+
+  def test_association_belongs_to_uses_singular_arg_directly
+    edges = analyze(<<~RUBY)
+      class Invoice < ApplicationRecord
+        belongs_to :user
+      end
+    RUBY
+    assoc = edges.find { |e| e.kind == "belongs_to" }
+    assert_equal "User", assoc.to
+  end
+
+  def test_association_class_name_override_wins
+    edges = analyze(<<~RUBY)
+      class Invoice < ApplicationRecord
+        has_many :line_items, class_name: "Billing::LineItem"
+      end
+    RUBY
+    assoc = edges.find { |e| e.kind == "has_many" }
+    assert_equal "Billing::LineItem", assoc.to
+  end
+
+  def test_association_has_and_belongs_to_many
+    edges = analyze(<<~RUBY)
+      class Document < ApplicationRecord
+        has_and_belongs_to_many :tags
+      end
+    RUBY
+    assoc = edges.find { |e| e.kind == "has_and_belongs_to_many" }
+    assert_equal "Tag", assoc.to
+  end
+
   def analyze(source, path: "test.rb")
     analyze_inner(source, path: path, include_constant_refs: false)
   end
@@ -177,7 +220,10 @@ class AnalyzerTest < Minitest::Test
       analyzer = Analyzer.new(path: path, context: FakeNodeContext.new(ancestors))
       results.concat(analyzer.class_edges(node)) if node.is_a?(Prism::ClassNode)
       results.concat(analyzer.module_edges(node)) if node.is_a?(Prism::ModuleNode)
-      results.concat(analyzer.call_edges(node)) if node.is_a?(Prism::CallNode)
+      if node.is_a?(Prism::CallNode)
+        results.concat(analyzer.call_edges(node))
+        results.concat(analyzer.association_edges(node))
+      end
       if include_constant_refs
         results.concat(analyzer.constant_read_edges(node)) if node.is_a?(Prism::ConstantReadNode)
         results.concat(analyzer.constant_path_edges(node)) if node.is_a?(Prism::ConstantPathNode)

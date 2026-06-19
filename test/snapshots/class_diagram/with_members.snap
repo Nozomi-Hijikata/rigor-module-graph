@@ -1,0 +1,11 @@
+classDiagram
+  class ApplicationRecord
+  class Invoice
+  class Invoice {
+    +total()
+    -save_silently()
+    +find() $
+    +amount : accessor
+  }
+
+  ApplicationRecord <|-- Invoice : inherits

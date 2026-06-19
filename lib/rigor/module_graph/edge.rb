@@ -5,7 +5,28 @@ require "json"
 module Rigor
   module ModuleGraph
     # The list of valid +kind+ values for an Edge.
-    EDGE_KINDS = %w[inherits include prepend extend const_ref].freeze
+    EDGE_KINDS = %w[
+      inherits
+      include
+      prepend
+      extend
+      const_ref
+      has_many
+      belongs_to
+      has_one
+      has_and_belongs_to_many
+    ].freeze
+
+    # Subset of EDGE_KINDS that represent Rails ActiveRecord
+    # associations. Used by the class diagram renderer to attach
+    # cardinality labels, and by callers that want to filter the
+    # set as a group.
+    ASSOCIATION_KINDS = %w[has_many belongs_to has_one has_and_belongs_to_many].freeze
+
+    # The structural / mixin kinds — the "first class" relations
+    # of a typical dependency graph. const_ref and associations
+    # sit outside this set.
+    STRUCTURAL_KINDS = %w[inherits include prepend extend].freeze
 
     # The list of valid +confidence+ values for an Edge.
     EDGE_CONFIDENCES = %w[syntax zeitwerk rigor_type unresolved].freeze

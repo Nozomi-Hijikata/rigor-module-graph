@@ -8,6 +8,7 @@ require "set"
 require "shellwords"
 
 require_relative "edge"
+require_relative "node"
 require_relative "dot"
 require_relative "mermaid"
 require_relative "cycle_detector"
@@ -15,6 +16,7 @@ require_relative "reachability"
 require_relative "stats"
 require_relative "packwerk_overlay"
 require_relative "html_view"
+require_relative "uml/class_diagram"
 
 module Rigor
   module ModuleGraph
@@ -33,8 +35,10 @@ module Rigor
     # pruned without touching the JSONL on disk.
     module CLI
       DEFAULT_EDGES_PATH = ".rigor/module_graph/edges.jsonl"
+      DEFAULT_NODES_PATH = ".rigor/module_graph/nodes.jsonl"
       SOURCE_FAMILY = "plugin.module-graph"
       EDGE_RULE = "edge"
+      NODE_RULE = "node"
 
       module_function
 
@@ -56,6 +60,8 @@ module Rigor
           Cycles.new(stdout: stdout, stderr: stderr, stdin: stdin).run(argv)
         when "stats"
           StatsCmd.new(stdout: stdout, stderr: stderr, stdin: stdin).run(argv)
+        when "class-diagram"
+          ClassDiagramCmd.new(stdout: stdout, stderr: stderr, stdin: stdin).run(argv)
         when "-h", "--help", "help"
           stdout.puts USAGE
           0
@@ -76,12 +82,13 @@ module Rigor
         directory, write an HTML report, and open it in a browser.
 
         Commands:
-          view    [PATHS...]   Analyse, write HTML, open in a browser
-          collect [PATHS...]   Run `rigor check` and write edges JSONL
-          dot     [FILE]       Render edges JSONL as Graphviz DOT
-          mermaid [FILE]       Render edges JSONL as Mermaid
-          cycles  [FILE]       Detect cycles in edges JSONL
-          stats   [FILE]       Per-namespace fan-in / fan-out report
+          view          [PATHS...]   Analyse, write HTML, open in a browser
+          collect       [PATHS...]   Run `rigor check` and write edges + nodes JSONL
+          dot           [FILE]       Render edges JSONL as Graphviz DOT
+          mermaid       [FILE]       Render edges JSONL as Mermaid flowchart
+          class-diagram [FILE]       Render edges + nodes as Mermaid classDiagram (UML)
+          cycles        [FILE]       Detect cycles in edges JSONL
+          stats         [FILE]       Per-namespace fan-in / fan-out report
 
         Run `rigor-module-graph <command> --help` for command-specific options.
       USAGE
@@ -133,8 +140,8 @@ module Rigor
       end
 
       # Encapsulates the actual `rigor check --format json` shell-out
-      # and the diagnostic → Edge transformation. Reused by both
-      # `Collect` (write JSONL) and `View` (render HTML).
+      # and the diagnostic → Edge / Node transformation. Reused by
+      # both `Collect` (write JSONL) and `View` (render HTML).
       class RigorRunner
         def initialize(rigor_cmd: ENV.fetch("RIGOR_CMD", "rigor"), cache: false)
           @rigor_cmd = rigor_cmd
@@ -144,6 +151,12 @@ module Rigor
         def edges_for(paths)
           diagnostics = run_rigor(paths)
           diagnostics_to_edges(diagnostics)
+        end
+
+        # Returns both edges and nodes from one rigor invocation.
+        def analyse(paths)
+          diagnostics = run_rigor(paths)
+          [diagnostics_to_edges(diagnostics), diagnostics_to_nodes(diagnostics)]
         end
 
         def run_rigor(paths)
@@ -191,6 +204,27 @@ module Rigor
             nil
           end
         end
+
+        def diagnostics_to_nodes(diagnostics)
+          diagnostics.filter_map do |row|
+            next unless row["rule"] == NODE_RULE
+            next unless row["source_family"] == SOURCE_FAMILY
+
+            payload = JSON.parse(row.fetch("message"))
+            Node.build(
+              kind: payload.fetch("kind"),
+              name: payload.fetch("name"),
+              owner: payload["owner"],
+              path: row["path"],
+              line: row["line"],
+              column: row["column"],
+              visibility: payload["visibility"],
+              access: payload["access"]
+            )
+          rescue JSON::ParserError, KeyError
+            nil
+          end
+        end
       end
 
       class CollectError < StandardError; end
@@ -206,6 +240,7 @@ module Rigor
           @stderr = stderr
           @options = {
             output: DEFAULT_EDGES_PATH,
+            nodes_output: DEFAULT_NODES_PATH,
             cache: false,
             rigor_cmd: ENV.fetch("RIGOR_CMD", "rigor")
           }
@@ -215,11 +250,13 @@ module Rigor
           parser = build_parser
           paths = parser.parse(argv)
 
-          ensure_output_dir
+          ensure_output_dirs
           runner = RigorRunner.new(rigor_cmd: @options[:rigor_cmd], cache: @options[:cache])
-          edges = runner.edges_for(paths)
+          edges, nodes = runner.analyse(paths)
           write_edges(edges)
-          @stderr.puts "rigor-module-graph: wrote #{edges.size} edge(s) to #{@options[:output]}"
+          write_nodes(nodes)
+          @stderr.puts "rigor-module-graph: wrote #{edges.size} edge(s) to #{@options[:output]}, " \
+                       "#{nodes.size} node(s) to #{@options[:nodes_output]}"
           0
         rescue OptionParser::ParseError => e
           @stderr.puts "rigor-module-graph collect: #{e.message}"
@@ -236,6 +273,10 @@ module Rigor
                     "Write edges to PATH (default: #{DEFAULT_EDGES_PATH})") do |path|
               @options[:output] = path
             end
+            opts.on("--nodes-output PATH",
+                    "Write nodes to PATH (default: #{DEFAULT_NODES_PATH})") do |path|
+              @options[:nodes_output] = path
+            end
             opts.on("--[no-]cache",
                     "Pass `--cache` / `--no-cache` to rigor (default: --no-cache)") do |cache|
               @options[:cache] = cache
@@ -251,14 +292,22 @@ module Rigor
           end
         end
 
-        def ensure_output_dir
-          dir = File.dirname(@options[:output])
-          FileUtils.mkdir_p(dir) unless dir.empty?
+        def ensure_output_dirs
+          [@options[:output], @options[:nodes_output]].each do |path|
+            dir = File.dirname(path)
+            FileUtils.mkdir_p(dir) unless dir.empty?
+          end
         end
 
         def write_edges(edges)
           File.open(@options[:output], "w") do |io|
             EdgeIO.write(edges, io)
+          end
+        end
+
+        def write_nodes(nodes)
+          File.open(@options[:nodes_output], "w") do |io|
+            NodeIO.write(nodes, io)
           end
         end
       end
@@ -549,6 +598,114 @@ module Rigor
           when :dot then Dot.render(edges, collapse: @state[:collapse], groups: groups)
           when :mermaid then Mermaid.render(edges, collapse: @state[:collapse], groups: groups)
           end
+        end
+      end
+
+      # `class-diagram` renders a Mermaid +classDiagram+ document
+      # from the +edges.jsonl+ (the dependency graph) and the
+      # +nodes.jsonl+ (class declarations + methods + attributes).
+      # Phase 5 of the project — turns the dependency graph
+      # material into a UML-style class diagram.
+      class ClassDiagramCmd
+        include EdgeFilters
+
+        DEFAULT_NODES_PATH = CLI::DEFAULT_NODES_PATH
+
+        def initialize(stdout:, stderr:, stdin:)
+          @stdout = stdout
+          @stderr = stderr
+          @stdin = stdin
+          @options = {
+            kinds: nil, confidences: nil,
+            from: nil, depth: nil, direction: :both,
+            nodes_path: nil,
+            include_methods: true,
+            include_attributes: true,
+            visibilities: %w[public protected private]
+          }
+        end
+
+        def run(argv)
+          argv = argv.dup
+          parse_options!(argv)
+          edges_path = argv.shift
+          io = edges_path ? File.open(edges_path, "r") : @stdin
+          begin
+            edges = EdgeIO.read(io)
+          ensure
+            io.close if edges_path && !io.closed?
+          end
+
+          edges = apply_filters(
+            edges,
+            kinds: @options[:kinds],
+            confidences: @options[:confidences],
+            from: @options[:from],
+            depth: @options[:depth],
+            direction: @options[:direction]
+          )
+
+          nodes_path = @options[:nodes_path] || default_nodes_for(edges_path)
+          nodes = read_nodes(nodes_path)
+
+          out = Uml::ClassDiagram.render(
+            edges, nodes,
+            include_methods: @options[:include_methods],
+            include_attributes: @options[:include_attributes],
+            visibilities: @options[:visibilities]
+          )
+          @stdout.print(out)
+          0
+        rescue OptionParser::ParseError => e
+          @stderr.puts "rigor-module-graph class-diagram: #{e.message}"
+          2
+        rescue Errno::ENOENT => e
+          @stderr.puts "rigor-module-graph class-diagram: #{e.message}"
+          1
+        end
+
+        def parse_options!(argv)
+          parser = OptionParser.new do |opts|
+            opts.banner = "Usage: rigor-module-graph class-diagram [options] [EDGES_FILE]"
+            opts.on("--nodes PATH",
+                    "Path to the nodes JSONL (default: sibling of EDGES_FILE)") do |path|
+              @options[:nodes_path] = path
+            end
+            opts.on("--no-methods",
+                    "Don't render methods inside class bodies") do
+              @options[:include_methods] = false
+            end
+            opts.on("--no-attributes",
+                    "Don't render attributes inside class bodies") do
+              @options[:include_attributes] = false
+            end
+            opts.on("--public-only",
+                    "Only show public members") do
+              @options[:visibilities] = %w[public]
+            end
+            opts.on("--no-private",
+                    "Hide private members") do
+              @options[:visibilities] = %w[public protected]
+            end
+            add_filter_options(opts, @options)
+            opts.on("-h", "--help") do
+              @stdout.puts opts
+              exit 0
+            end
+          end
+          parser.parse!(argv)
+        end
+
+        def default_nodes_for(edges_path)
+          return DEFAULT_NODES_PATH unless edges_path
+
+          File.join(File.dirname(edges_path), "nodes.jsonl")
+        end
+
+        def read_nodes(path)
+          return [] unless path && File.exist?(path)
+
+          File.open(path, "r") { |io| NodeIO.read(io) }
         end
       end
 

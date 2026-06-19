@@ -1,0 +1,7 @@
+classDiagram
+  class ApplicationRecord
+  class Auditable["Auditable «module»"]
+  class Billing__Invoice["Billing::Invoice"]
+
+  ApplicationRecord <|-- Billing__Invoice : inherits
+  Auditable <|.. Billing__Invoice : include

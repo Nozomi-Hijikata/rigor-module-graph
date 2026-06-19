@@ -80,6 +80,12 @@ wrong.
   (`--package` / `--package-root`) so DOT/Mermaid/view cluster by
   `packages/<name>/package.yml` boundaries instead of (or in
   addition to) the Ruby namespace.
+- **Phase 5** ✅: UML-style class diagram output. `collect` also
+  writes `nodes.jsonl` (class / module declarations + methods +
+  attributes + Ruby visibility). `class-diagram` renders Mermaid
+  `classDiagram` syntax with member visibility glyphs and
+  cardinality on Rails associations (`has_many` / `belongs_to` /
+  `has_one` / `has_and_belongs_to_many`).
 - See `plan.md` for the full picture.
 
 ## Installation
@@ -207,6 +213,11 @@ bundle exec rigor-module-graph cycles  .rigor/module_graph/edges.jsonl
 # Per-namespace fan-in / fan-out report
 bundle exec rigor-module-graph stats   .rigor/module_graph/edges.jsonl
 bundle exec rigor-module-graph stats --format json --limit 10 edges.jsonl
+
+# UML class diagram (Mermaid classDiagram). Reads edges + the
+# sibling nodes.jsonl that `collect` writes.
+bundle exec rigor-module-graph class-diagram .rigor/module_graph/edges.jsonl > class.mmd
+bundle exec rigor-module-graph class-diagram --no-private --no-attributes edges.jsonl
 ```
 
 `collect` shells out to `rigor check --format json --no-cache` and
@@ -300,3 +311,21 @@ release: <https://rubydoc.info/gems/rigor-module-graph>.
 - Ruby `>= 4.0.0, < 4.1`
 - rigortype `~> 0.2.1`
 - rbs `~> 4.0`
+
+## Phase 5 limitations
+
+- The visibility tracker honours bare `private` / `public` /
+  `protected` keywords. The explicit symbol form (`private :foo,
+  :bar`), `private_class_method`, and `class << self` blocks
+  fall through and read as `public`.
+- The Rails inflector is the tiny one this gem ships. For
+  irregular plurals not in the bundled table (`mice`, `people`,
+  `feet`, `children`, …), or for project-specific ones, prefer
+  `class_name: "Foo"` on the association so the resolved name is
+  exact rather than guessed.
+- Mermaid 10.x's `classDiagram` parser silently rejects the
+  document when the UML `<<module>>` annotation co-exists with
+  the `class Foo["Label"]` form needed for namespaced constants,
+  so module nodes carry a `«module»` label suffix instead of the
+  UML annotation glyph. Drop-in fix once Mermaid stabilises that
+  combination.

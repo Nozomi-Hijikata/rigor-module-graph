@@ -3,7 +3,9 @@
 require "prism"
 require_relative "constant_name"
 require_relative "edge"
+require_relative "node"
 require_relative "zeitwerk_resolver"
+require_relative "inflector"
 
 module Rigor
   module ModuleGraph
@@ -24,14 +26,27 @@ module Rigor
     # - `syntax` otherwise.
     class Analyzer
       MIXIN_METHODS = %i[include prepend extend].freeze
+      ATTR_METHODS = {
+        attr_reader: "read",
+        attr_writer: "write",
+        attr_accessor: "accessor"
+      }.freeze
+      ASSOCIATION_METHODS = {
+        has_many: "has_many",
+        belongs_to: "belongs_to",
+        has_one: "has_one",
+        has_and_belongs_to_many: "has_and_belongs_to_many"
+      }.freeze
+      VISIBILITY_MARKERS = %i[public protected private].freeze
 
-      attr_reader :path, :context, :scope, :zeitwerk
+      attr_reader :path, :context, :scope, :zeitwerk, :visibility_map
 
-      def initialize(path:, context:, scope: nil, zeitwerk: nil)
+      def initialize(path:, context:, scope: nil, zeitwerk: nil, visibility_map: nil)
         @path = path
         @context = context
         @scope = scope
         @zeitwerk = zeitwerk
+        @visibility_map = visibility_map
       end
 
       # Emits an `inherits` edge when the class declares a
@@ -58,6 +73,102 @@ module Rigor
       # with the class rule.
       def module_edges(_node)
         []
+      end
+
+      # Phase 5a — a Node row for the class declaration itself.
+      # Used by the plugin's +rule: "node"+ diagnostic emitter so
+      # downstream tooling can list classes by file / line.
+      def class_node_metadata(node)
+        owner = owner_for_decl(node)
+        return nil unless owner
+
+        Node.build(
+          kind: "class", name: owner,
+          path: path, line: line_of(node), column: column_of(node)
+        )
+      end
+
+      # Phase 5a — a Node row for the module declaration.
+      def module_node_metadata(node)
+        owner = owner_for_decl(node)
+        return nil unless owner
+
+        Node.build(
+          kind: "module", name: owner,
+          path: path, line: line_of(node), column: column_of(node)
+        )
+      end
+
+      # Phase 5a — a Node row for a +def+ / +def self.+. Reads
+      # visibility from the +VisibilityMap+ when one is wired in;
+      # defaults to +public+ otherwise.
+      def method_node_metadata(node)
+        owner = ConstantName.lexical_owner(context)
+        return nil unless owner
+
+        Node.build(
+          kind: node.receiver.nil? ? "instance_method" : "class_method",
+          name: node.name.to_s,
+          owner: owner,
+          visibility: visibility_for(node),
+          path: path, line: line_of(node), column: column_of(node)
+        )
+      end
+
+      # Phase 5a — Node rows for +attr_reader+ / +attr_writer+ /
+      # +attr_accessor+ calls. One Node per symbol argument.
+      def attribute_nodes(node)
+        access = ATTR_METHODS[node.name]
+        return [] unless access
+        return [] unless node.receiver.nil?
+
+        owner = ConstantName.lexical_owner(context)
+        return [] unless owner
+
+        # Inside a class body the running visibility is what the
+        # bare keyword markers set. We approximate by reading the
+        # nearest enclosing def-or-attr-marker's visibility — but
+        # attr_* calls are sibling statements, not nested defs, so
+        # we fall back to public unless the class body's visibility
+        # tracker covers them. For MVP we record public; the
+        # filter side still excludes private nodes when callers
+        # add visibility tracking later.
+        attr_visibility = visibility_for(node) || "public"
+
+        arguments_of(node).filter_map do |arg|
+          name = symbol_name(arg)
+          next unless name
+
+          Node.build(
+            kind: "attribute", name: name, owner: owner,
+            visibility: attr_visibility, access: access,
+            path: path, line: line_of(node), column: column_of(node)
+          )
+        end
+      end
+
+      # Phase 5b — Rails ActiveRecord association edges. For
+      # +has_many :invoices+ we infer +Invoice+ via the bundled
+      # Inflector; +class_name: "Foo"+ overrides win when present.
+      def association_edges(node)
+        kind = ASSOCIATION_METHODS[node.name]
+        return [] unless kind
+        return [] unless node.receiver.nil?
+
+        owner = ConstantName.lexical_owner(context)
+        return [] unless owner
+
+        arguments_of(node).filter_map do |arg|
+          next unless (sym = symbol_name(arg))
+
+          target = class_name_from_options(node) ||
+                   Inflector.class_name_for(sym)
+          build_edge(
+            from: owner, to: target, kind: kind, node: node,
+            confidence: :syntax,
+            raw: sym
+          )
+        end
       end
 
       # Emits `include` / `prepend` / `extend` edges for a call
@@ -170,6 +281,41 @@ module Rigor
 
       def mixin_call?(node)
         MIXIN_METHODS.include?(node.name) && node.receiver.nil?
+      end
+
+      def symbol_name(arg)
+        case arg
+        when Prism::SymbolNode
+          arg.value
+        when Prism::StringNode
+          arg.unescaped
+        end
+      end
+
+      # Pulls +class_name: "Foo"+ (or +:Foo+) out of the keyword
+      # arguments on an association call. Returns nil when absent.
+      def class_name_from_options(node)
+        args = arguments_of(node)
+        keyword_hash = args.find { |a| a.is_a?(Prism::KeywordHashNode) || a.is_a?(Prism::HashNode) }
+        return nil unless keyword_hash
+
+        keyword_hash.elements.each do |elem|
+          next unless elem.is_a?(Prism::AssocNode)
+
+          key = elem.key
+          next unless key.is_a?(Prism::SymbolNode) && key.value == "class_name"
+
+          value = elem.value
+          return value.unescaped if value.is_a?(Prism::StringNode)
+          return value.value.to_s if value.is_a?(Prism::SymbolNode)
+        end
+        nil
+      end
+
+      def visibility_for(node)
+        return nil unless visibility_map
+
+        visibility_map.visibility_for(node)
       end
 
       def arguments_of(node)
