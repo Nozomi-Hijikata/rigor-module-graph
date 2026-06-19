@@ -37,6 +37,15 @@ class MermaidTest < Minitest::Test
     assert_snapshot "mermaid/collapse_billing", Mermaid.render(edges, collapse: ["Billing"])
   end
 
+  def test_groups_overrides_collapse_with_explicit_node_to_cluster
+    edges = [
+      Edge.build(from: "Invoice", to: "Application", kind: "inherits"),
+      Edge.build(from: "User", to: "Application", kind: "inherits")
+    ]
+    groups = { "Invoice" => "packages/billing", "User" => "packages/auth" }
+    assert_snapshot "mermaid/groups_packages", Mermaid.render(edges, groups: groups)
+  end
+
   def test_unresolved_edge_gets_unresolved_class
     edges = [
       Edge.build(from: "Foo", to: "some_variable", kind: "include", confidence: "unresolved")

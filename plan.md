@@ -347,26 +347,32 @@ namespace collapse は DOT の `subgraph cluster_...` で表現する。
 - 間接参照は MVP では「`unresolved` edge を捨てない」を優先。Rails の DSL や proc 越しの mixin も graph に痕跡が残るので、後で `--confidence syntax,zeitwerk,rigor_type` でフィルタするか、`raw` を見て手で潰すかは利用者の判断に任せる
 - Singleton 以外の Type carrier（Nominal、Dynamic、Union、Constant など）は今回 demote 扱い。多くの Rigor type が `Module` の identity を運ばないので、無理に拡張せず conservative にした
 
-### Phase 4: 分析機能（部分達成）
+### Phase 4: 分析機能 ✅（2026-06-19 完了）
 
 対象 / 達成状況:
 
 - strongly connected components による循環検出 → ✅ Phase 1 で実装済（`CycleDetector` は iterative Tarjan）
 - `kind` ごとの filter → ✅ Phase 2 で実装済（`--kind inherits,include` etc.）
 - `confidence` ごとの filter → ✅ Phase 3 で実装済（`--confidence syntax,zeitwerk,rigor_type`）
-- owner namespace ごとの fan-in / fan-out → 未対応
-- "この namespace から外へ出ている依存" の集計 → 未対応
-- package boundary file がある場合の package overlay → 未対応
+- owner namespace ごとの fan-in / fan-out → ✅ `stats` サブコマンド（text/JSON、`--grouping-depth N`、`--limit N`）
+- "この namespace から外へ出ている依存" の集計 → ✅ `stats` の `fan_out` カラムがそれ。`internal` と分けて表示
+- package boundary file がある場合の package overlay → ✅ `--package` / `--package-root` フラグ（DOT/Mermaid/view）
 
 完了条件:
 
 - `rigor-module-graph cycles` が循環を短い path で表示する → 完了（smallest-name rotation で出力）
 - `--only include,inherits` などで noise を落とせる → 完了（`--kind` に統一、`--only` は cycles のみエイリアス保持）
+- `rigor-module-graph stats` で 1 命令の概観 → 完了（先に大きい fan-out から並ぶ）
+- packwerk-shaped repo で `--package` が `subgraph cluster_packages_billing` として cluster を作る → 完了（fixture で snapshot 化）
 
-残作業（必要なら追って Phase 4.5 で）:
+設計メモ:
 
-- `rigor-module-graph stats` サブコマンド（fan-in / fan-out / namespace 別の集計）
-- `--package` overlay（`packwerk.yml` 等の境界 file を読んで cluster をその境界に合わせる）
+- `Stats` は top-level namespace 単位の集計をデフォルトとし、`--grouping-depth N` で深く切れる。絶対 path（`::Foo`）と相対 path は同一 constant として 1 ノードに畳む
+- `(top-level)` は意図的な特殊ラベル。base class / 外部 constant の流入が多いので隠さず可視化
+- `PackwerkOverlay` は `package.yml` を `Find.find` で再帰探索（`.git` / `node_modules` / `vendor` / `tmp` / `log` は prune）。package 名は `packages/billing` のような project-root 相対パス、root の `package.yml` は `.` で表す
+- node の package 帰属は `edge.from` のみで判定（`to` を含めると `ApplicationRecord` のような base class が referrer の package に巻き込まれる）
+- macOS `/tmp` ↔ `/private/tmp` symlink を透過的に扱うため、package root も edge.path も `realpath` で正規化（存在しない path は最深ancestor のみ resolve して残りを reattach）
+- Dot / Mermaid の cluster identifier は `[A-Za-z0-9_]+` に sanitize（`packages/billing` → `cluster_packages_billing`）。ラベルは元の文字列を保ったまま使う
 
 ### Phase 5: UML クラス図出力
 

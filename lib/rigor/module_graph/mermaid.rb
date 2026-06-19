@@ -32,14 +32,20 @@ module Rigor
         classDef unresolved fill:#fef3c7,color:#0f172a,stroke:#d97706,stroke-dasharray: 4 4;
       MERMAID
 
-      def render(edges, collapse: [])
+      # @param edges [Array<Edge>]
+      # @param collapse [Array<String>] namespace prefixes to fold
+      #   into subgraphs (mutually exclusive with +groups+)
+      # @param groups [Hash{String=>String}, nil] explicit
+      #   +{node_name => cluster_label}+ mapping. Takes precedence
+      #   over +collapse+ when given.
+      def render(edges, collapse: [], groups: nil)
         edges = dedup(edges)
         node_ids = assign_node_ids(edges)
-        clusters, ungrouped = group_nodes(node_ids.keys.sort, collapse)
+        clusters, ungrouped = build_groups(node_ids.keys.sort, collapse, groups)
 
         out = +"flowchart LR\n"
-        clusters.each do |prefix, members|
-          out << render_cluster(prefix, members, node_ids)
+        clusters.each do |label, members|
+          out << render_cluster(label, members, node_ids, use_namespace_prefix: groups.nil?)
         end
         ungrouped.each do |name|
           out << "  #{node_ids[name]}[\"#{escape_label(name)}\"]\n"
@@ -105,7 +111,24 @@ module Rigor
         names.each_with_index.to_h { |name, idx| [name, "n#{idx}"] }
       end
 
-      def group_nodes(names, collapse)
+      def build_groups(names, collapse, groups)
+        if groups && !groups.empty?
+          clusters = Hash.new { |h, k| h[k] = [] }
+          ungrouped = []
+          names.each do |name|
+            if (label = groups[name])
+              clusters[label] << name
+            else
+              ungrouped << name
+            end
+          end
+          [clusters, ungrouped]
+        else
+          group_by_prefix(names, collapse)
+        end
+      end
+
+      def group_by_prefix(names, collapse)
         prefixes = Array(collapse).map(&:to_s).reject(&:empty?)
         return [{}, names] if prefixes.empty?
 
@@ -123,17 +146,21 @@ module Rigor
         [clusters, ungrouped]
       end
 
-      def render_cluster(prefix, members, node_ids)
-        out = +"  subgraph #{cluster_id(prefix)} [\"#{escape_label(prefix)}\"]\n"
+      def render_cluster(label, members, node_ids, use_namespace_prefix: true)
+        out = +"  subgraph #{cluster_id(label)} [\"#{escape_label(label)}\"]\n"
         members.each do |name|
-          short = name.sub(/\A#{Regexp.escape(prefix)}::/, "")
+          short = use_namespace_prefix ? name.sub(/\A#{Regexp.escape(label)}::/, "") : name
           out << "    #{node_ids[name]}[\"#{escape_label(short)}\"]\n"
         end
         out << "  end\n"
       end
 
+      # Mermaid subgraph ids must be plain identifiers; anything
+      # else breaks the parser silently. Coerce non-alnum
+      # characters to `_` so `packages/billing` ends up as
+      # `sg_packages_billing` and stays unambiguous.
       def cluster_id(prefix)
-        "sg_#{prefix.gsub("::", "_")}"
+        "sg_#{prefix.gsub(/[^A-Za-z0-9_]+/, "_")}"
       end
 
       def escape_label(name)

@@ -12,6 +12,8 @@ require_relative "dot"
 require_relative "mermaid"
 require_relative "cycle_detector"
 require_relative "reachability"
+require_relative "stats"
+require_relative "packwerk_overlay"
 require_relative "html_view"
 
 module Rigor
@@ -52,6 +54,8 @@ module Rigor
           Render.new(:mermaid, stdout: stdout, stderr: stderr, stdin: stdin).run(argv)
         when "cycles"
           Cycles.new(stdout: stdout, stderr: stderr, stdin: stdin).run(argv)
+        when "stats"
+          StatsCmd.new(stdout: stdout, stderr: stderr, stdin: stdin).run(argv)
         when "-h", "--help", "help"
           stdout.puts USAGE
           0
@@ -77,6 +81,7 @@ module Rigor
           dot     [FILE]       Render edges JSONL as Graphviz DOT
           mermaid [FILE]       Render edges JSONL as Mermaid
           cycles  [FILE]       Detect cycles in edges JSONL
+          stats   [FILE]       Per-namespace fan-in / fan-out report
 
         Run `rigor-module-graph <command> --help` for command-specific options.
       USAGE
@@ -294,7 +299,8 @@ module Rigor
             confidences: nil,
             from: nil,
             depth: nil,
-            direction: :both
+            direction: :both,
+            package: nil
           }
         end
 
@@ -313,12 +319,13 @@ module Rigor
             depth: @options[:depth],
             direction: @options[:direction]
           )
-          collapse = effective_collapse(edges)
+          groups = package_groups(edges)
+          collapse = groups ? [] : effective_collapse(edges)
 
-          mermaid = Mermaid.render(edges, collapse: collapse)
+          mermaid = Mermaid.render(edges, collapse: collapse, groups: groups)
           html = HtmlView.render(
             title: "rigor-module-graph: #{File.basename(Dir.pwd)}",
-            subtitle: render_subtitle(edges, collapse),
+            subtitle: render_subtitle(edges, collapse, groups),
             mermaid_source: mermaid
           )
           File.write(@options[:output], html)
@@ -351,6 +358,14 @@ module Rigor
             opts.on("--no-collapse",
                     "Disable namespace collapse entirely") do
               @options[:collapse] = []
+            end
+            opts.on("--package",
+                    "Cluster by Packwerk packages discovered in cwd") do
+              @options[:package] ||= "."
+            end
+            opts.on("--package-root PATH",
+                    "Cluster by Packwerk packages discovered under PATH") do |root|
+              @options[:package] = root
             end
             opts.on("--[no-]cache",
                     "Pass --cache / --no-cache to rigor (default: --no-cache)") do |cache|
@@ -396,7 +411,7 @@ module Rigor
           counts.select { |_, members| members.size >= AUTO_COLLAPSE_THRESHOLD }.keys.sort
         end
 
-        def render_subtitle(edges, collapse)
+        def render_subtitle(edges, collapse, groups)
           parts = ["#{edges.size} edge(s) from #{Dir.pwd}"]
           if @options[:from]
             from_part = +"from: #{Array(@options[:from]).join(", ")}"
@@ -404,13 +419,33 @@ module Rigor
             from_part << " [#{@options[:direction]}]" unless @options[:direction] == :both
             parts << from_part
           end
-          unless collapse.empty?
+          if groups
+            uniq_packages = groups.values.uniq.sort
+            preview = uniq_packages.first(SUBTITLE_COLLAPSE_PREVIEW)
+            label = +"packages: #{preview.join(", ")}"
+            if uniq_packages.size > preview.size
+              label << " (+#{uniq_packages.size - preview.size} more)"
+            end
+            parts << label
+          elsif !collapse.empty?
             preview = collapse.first(SUBTITLE_COLLAPSE_PREVIEW)
             label = +"collapsed: #{preview.join(", ")}"
             label << " (+#{collapse.size - preview.size} more)" if collapse.size > preview.size
             parts << label
           end
           parts.join(" · ")
+        end
+
+        def package_groups(edges)
+          return nil unless @options[:package]
+
+          overlay = PackwerkOverlay.discover(@options[:package])
+          unless overlay.any?
+            @stderr.puts "rigor-module-graph view: no package.yml found under #{@options[:package].inspect}; falling back to namespace collapse"
+            return nil
+          end
+
+          overlay.groups_for(edges)
         end
 
         def ensure_output_dir
@@ -439,7 +474,8 @@ module Rigor
           @stdin = stdin
           @state = {
             collapse: [], kinds: nil, confidences: nil,
-            from: nil, depth: nil, direction: :both
+            from: nil, depth: nil, direction: :both,
+            package: nil
           }
         end
 
@@ -461,7 +497,8 @@ module Rigor
             depth: @state[:depth],
             direction: @state[:direction]
           )
-          @stdout.print(rendered(edges))
+          groups = package_groups(edges)
+          @stdout.print(rendered(edges, groups))
           0
         rescue Errno::ENOENT => e
           @stderr.puts "rigor-module-graph #{@format}: #{e.message}"
@@ -471,12 +508,32 @@ module Rigor
           2
         end
 
+        def package_groups(edges)
+          return nil unless @state[:package]
+
+          overlay = PackwerkOverlay.discover(@state[:package])
+          unless overlay.any?
+            @stderr.puts "rigor-module-graph #{@format}: no package.yml found under #{@state[:package].inspect}"
+            return nil
+          end
+
+          overlay.groups_for(edges)
+        end
+
         def parse_options!(argv)
           parser = OptionParser.new do |opts|
             opts.banner = "Usage: rigor-module-graph #{@format} [options] [FILE]"
             opts.on("--collapse PREFIXES", Array,
                     "Comma-separated namespace prefixes to fold into clusters") do |prefixes|
               @state[:collapse].concat(prefixes)
+            end
+            opts.on("--package",
+                    "Cluster by Packwerk packages discovered in cwd") do
+              @state[:package] ||= "."
+            end
+            opts.on("--package-root PATH",
+                    "Cluster by Packwerk packages discovered under PATH") do |root|
+              @state[:package] = root
             end
             add_filter_options(opts, @state)
             opts.on("-h", "--help") do
@@ -487,11 +544,120 @@ module Rigor
           parser.parse!(argv)
         end
 
-        def rendered(edges)
+        def rendered(edges, groups)
           case @format
-          when :dot then Dot.render(edges, collapse: @state[:collapse])
-          when :mermaid then Mermaid.render(edges, collapse: @state[:collapse])
+          when :dot then Dot.render(edges, collapse: @state[:collapse], groups: groups)
+          when :mermaid then Mermaid.render(edges, collapse: @state[:collapse], groups: groups)
           end
+        end
+      end
+
+      # `stats` reports the fan-out / fan-in / internal / nodes
+      # numbers per namespace. Same filter flags as the renderers
+      # so a focused subgraph can be summarised without
+      # regenerating the JSONL.
+      class StatsCmd
+        include EdgeFilters
+
+        FORMATS = %w[text json].freeze
+        HEADERS = %w[namespace nodes fan-out fan-in internal total].freeze
+
+        def initialize(stdout:, stderr:, stdin:)
+          @stdout = stdout
+          @stderr = stderr
+          @stdin = stdin
+          @state = {
+            kinds: nil, confidences: nil,
+            from: nil, depth: nil, direction: :both,
+            grouping_depth: 1, format: "text", limit: nil
+          }
+        end
+
+        def run(argv)
+          argv = argv.dup
+          parse_options!(argv)
+          path, = argv
+          io = path ? File.open(path, "r") : @stdin
+          begin
+            edges = EdgeIO.read(io)
+          ensure
+            io.close if path && !io.closed?
+          end
+          edges = apply_filters(
+            edges,
+            kinds: @state[:kinds],
+            confidences: @state[:confidences],
+            from: @state[:from],
+            depth: @state[:depth],
+            direction: @state[:direction]
+          )
+          metrics = Stats.compute(edges, depth: @state[:grouping_depth])
+          metrics = metrics.first(@state[:limit]) if @state[:limit]
+          render(metrics)
+          0
+        rescue OptionParser::ParseError => e
+          @stderr.puts "rigor-module-graph stats: #{e.message}"
+          2
+        end
+
+        def parse_options!(argv)
+          parser = OptionParser.new do |opts|
+            opts.banner = "Usage: rigor-module-graph stats [options] [FILE]"
+            opts.on("--grouping-depth N", Integer,
+                    "How many leading namespace segments to group by (default: 1)") do |n|
+              @state[:grouping_depth] = n
+            end
+            opts.on("--limit N", Integer,
+                    "Show only the top N namespaces by fan-out") do |n|
+              @state[:limit] = n
+            end
+            opts.on("--format FORMAT", FORMATS,
+                    "Output format (#{FORMATS.join("/")}; default: text)") do |fmt|
+              @state[:format] = fmt
+            end
+            add_filter_options(opts, @state)
+            opts.on("-h", "--help") do
+              @stdout.puts opts
+              exit 0
+            end
+          end
+          parser.parse!(argv)
+        end
+
+        def render(metrics)
+          case @state[:format]
+          when "json"
+            @stdout.puts(JSON.pretty_generate(metrics.map(&:to_h)))
+          when "text"
+            @stdout.print(format_table(metrics))
+          end
+        end
+
+        # A space-padded text table sized to the widest cell per
+        # column. Numeric columns are right-aligned so a quick
+        # eye-scan finds the hotspots.
+        def format_table(metrics)
+          if metrics.empty?
+            return "(no edges)\n"
+          end
+
+          rows = metrics.map do |m|
+            [m.namespace, m.nodes.to_s, m.fan_out.to_s, m.fan_in.to_s,
+             m.internal.to_s, m.total.to_s]
+          end
+          widths = HEADERS.zip(*rows).map { |col| col.map(&:length).max }
+
+          out = +""
+          out << format_row(HEADERS, widths) << "\n"
+          out << "-" * widths.sum { |w| w + 2 } << "\n"
+          rows.each { |row| out << format_row(row, widths) << "\n" }
+          out
+        end
+
+        def format_row(row, widths)
+          row.each_with_index.map do |cell, idx|
+            idx.zero? ? cell.ljust(widths[idx]) : cell.rjust(widths[idx])
+          end.join("  ")
         end
       end
 

@@ -40,14 +40,22 @@ module Rigor
           edge [color="#64748b", arrowsize=0.7, fontname="Helvetica"];
       DOT
 
-      def render(edges, collapse: [])
+      # @param edges [Array<Edge>]
+      # @param collapse [Array<String>] namespace prefixes to
+      #   fold into clusters (mutually exclusive with +groups+)
+      # @param groups [Hash{String=>String}, nil] explicit
+      #   +{node_name => cluster_label}+ mapping. Takes precedence
+      #   over +collapse+ when given. Used by the +--package+
+      #   overlay where the cluster boundary is something other
+      #   than a +::+ namespace prefix.
+      def render(edges, collapse: [], groups: nil)
         edges = dedup(edges)
         nodes = collect_nodes(edges)
-        clusters, ungrouped = group_nodes(nodes, collapse)
+        clusters, ungrouped = build_groups(nodes, collapse, groups)
 
         out = +HEADER
-        clusters.each do |prefix, members|
-          out << render_cluster(prefix, members)
+        clusters.each do |label, members|
+          out << render_cluster(label, members, use_namespace_prefix: groups.nil?)
         end
         ungrouped.each do |name|
           out << "  #{quote(name)};\n"
@@ -75,9 +83,27 @@ module Rigor
         names.uniq.sort
       end
 
-      # Partition nodes into clusters keyed by the matched prefix,
-      # plus a list of names that didn't match any prefix.
-      def group_nodes(nodes, collapse)
+      # Build the cluster partition. When +groups+ is given we
+      # use it verbatim; otherwise fall back to prefix-matching
+      # against +collapse+ (the legacy namespace-collapse path).
+      def build_groups(nodes, collapse, groups)
+        if groups && !groups.empty?
+          clusters = Hash.new { |h, k| h[k] = [] }
+          ungrouped = []
+          nodes.each do |name|
+            if (label = groups[name])
+              clusters[label] << name
+            else
+              ungrouped << name
+            end
+          end
+          [clusters, ungrouped]
+        else
+          group_by_prefix(nodes, collapse)
+        end
+      end
+
+      def group_by_prefix(nodes, collapse)
         prefixes = Array(collapse).map(&:to_s).reject(&:empty?)
         return [{}, nodes] if prefixes.empty?
 
@@ -95,21 +121,26 @@ module Rigor
         [clusters, ungrouped]
       end
 
-      def render_cluster(prefix, members)
-        out = +"  subgraph #{quote("cluster_" + cluster_id(prefix))} {\n"
-        out << "    label=#{quote(prefix)};\n"
+      def render_cluster(label, members, use_namespace_prefix: true)
+        out = +"  subgraph #{quote("cluster_" + cluster_id(label))} {\n"
+        out << "    label=#{quote(label)};\n"
         out << "    style=\"rounded,filled\";\n"
         out << "    color=\"#cbd5e1\";\n"
         out << "    fillcolor=\"#f1f5f9\";\n"
         members.each do |name|
-          short = name.sub(/\A#{Regexp.escape(prefix)}::/, "")
+          short = use_namespace_prefix ? name.sub(/\A#{Regexp.escape(label)}::/, "") : name
           out << "    #{quote(name)} [label=#{quote(short)}];\n"
         end
         out << "  }\n"
       end
 
+      # Cluster identifiers in DOT must match `[A-Za-z_][A-Za-z0-9_]*`
+      # — package names like `packages/billing` would otherwise
+      # break Graphviz's parser even inside quotes. Squash every
+      # non-id character to `_` so the prefix `cluster_` still
+      # triggers Graphviz's cluster handling.
       def cluster_id(prefix)
-        prefix.gsub("::", "_")
+        prefix.gsub(/[^A-Za-z0-9_]+/, "_")
       end
 
       def render_edge(edge)

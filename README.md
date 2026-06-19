@@ -75,8 +75,11 @@ wrong.
   promotes the edge to `confidence: "rigor_type"`. Failures
   degrade to `confidence: "unresolved"` with the source slice
   preserved in `raw`.
-- **Phase 4** (planned): namespace fan-in / fan-out, package
-  overlay.
+- **Phase 4** ✅: per-namespace fan-in / fan-out report
+  (`stats` subcommand, text + JSON), Packwerk overlay
+  (`--package` / `--package-root`) so DOT/Mermaid/view cluster by
+  `packages/<name>/package.yml` boundaries instead of (or in
+  addition to) the Ruby namespace.
 - See `plan.md` for the full picture.
 
 ## Installation
@@ -170,6 +173,10 @@ rigor-module-graph view --no-collapse
 # Same kind / confidence filters as the lower-level commands
 rigor-module-graph view --kind inherits,include
 rigor-module-graph view --confidence syntax,zeitwerk
+
+# Cluster by Packwerk packages (auto-detects package.yml under cwd)
+rigor-module-graph view --package
+rigor-module-graph view --package-root /path/to/repo
 ```
 
 `--direction` controls how the +--from+ walk follows edges:
@@ -196,6 +203,10 @@ dot -Tsvg graph.dot -o graph.svg
 
 # Detect cycles (exit 1 if any are found)
 bundle exec rigor-module-graph cycles  .rigor/module_graph/edges.jsonl
+
+# Per-namespace fan-in / fan-out report
+bundle exec rigor-module-graph stats   .rigor/module_graph/edges.jsonl
+bundle exec rigor-module-graph stats --format json --limit 10 edges.jsonl
 ```
 
 `collect` shells out to `rigor check --format json --no-cache` and
@@ -226,6 +237,10 @@ bundle exec rigor-module-graph mermaid --collapse Billing edges.jsonl
 # constants (works on dot / mermaid / cycles too)
 bundle exec rigor-module-graph dot     --from Article --depth 5 edges.jsonl
 bundle exec rigor-module-graph mermaid --from Article --depth 5 --direction out edges.jsonl
+
+# Cluster by Packwerk packages instead of by namespace
+bundle exec rigor-module-graph dot     --package edges.jsonl  # cwd
+bundle exec rigor-module-graph mermaid --package-root /path/to/repo edges.jsonl
 
 # Cycles that stay within structural edges only
 bundle exec rigor-module-graph cycles --kind inherits,include edges.jsonl

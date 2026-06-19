@@ -66,7 +66,7 @@ class ViewTest < Minitest::Test
   def test_render_subtitle_includes_collapse_when_present
     view = build_view
     edges = [Edge.build(from: "A", to: "B", kind: "include")]
-    subtitle = view.render_subtitle(edges, ["Billing"])
+    subtitle = view.render_subtitle(edges, ["Billing"], nil)
     assert_includes subtitle, "1 edge(s)"
     assert_includes subtitle, "collapsed: Billing"
   end
@@ -74,7 +74,7 @@ class ViewTest < Minitest::Test
   def test_render_subtitle_truncates_long_collapse_lists
     view = build_view
     collapse = %w[A B C D E F G H I J]
-    subtitle = view.render_subtitle([], collapse)
+    subtitle = view.render_subtitle([], collapse, nil)
     # Preview window is 6; the rest is summarised so the trailer
     # doesn't grow unbounded on a large project.
     assert_includes subtitle, "collapsed: A, B, C, D, E, F (+4 more)"
@@ -82,8 +82,20 @@ class ViewTest < Minitest::Test
 
   def test_render_subtitle_omits_collapse_when_empty
     view = build_view
-    subtitle = view.render_subtitle([], [])
+    subtitle = view.render_subtitle([], [], nil)
     refute_includes subtitle, "collapsed:"
+  end
+
+  def test_render_subtitle_reports_packages_instead_of_collapse_when_groups_given
+    view = build_view
+    groups = {
+      "Billing::Invoice" => "packages/billing",
+      "Auth::User" => "packages/auth",
+      "Billing::Payment" => "packages/billing"
+    }
+    subtitle = view.render_subtitle([], [], groups)
+    refute_includes subtitle, "collapsed:"
+    assert_includes subtitle, "packages: packages/auth, packages/billing"
   end
 
   def build_view(collapse: nil)
