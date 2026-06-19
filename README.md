@@ -11,12 +11,60 @@ looks at the Ruby nominal graph — inheritance, `include`/`prepend`/
 The screenshot above is from `examples/billing/`. Open
 `examples/billing/index.html` for the live Mermaid version.
 
+## これは何をしているのか
+
+原理的には、Ruby ソースを静的解析して **class / module / constant
+をノード、言語上の参照関係をエッジに変換するグラフ抽出器** です。
+
+パイプライン:
+
+1. Rigor が Prism で Ruby を AST にする。
+2. plugin の `node_rule` が `ClassNode` / `CallNode` /
+   `ConstantReadNode` などを拾う。
+3. そのノードが意味する依存を edge に変換する。
+   - `class A < B` → `A -> B / inherits`
+   - `include M` → `A -> M / include`
+   - `Money` という定数参照 → `A -> Money / const_ref`（Phase 2 以降）
+4. `from` は `context.ancestors` から lexical owner を組み立てる
+   （`class Billing::Invoice` の owner は `Billing::Invoice` まで含む）。
+5. `to` は syntax → Zeitwerk 規約 → Rigor 型情報 の順で、できる
+   範囲だけ解決する。確度は `confidence` フィールドに残す。
+6. edge は Rigor の `:info` diagnostic として流し、`collect`
+   サブコマンドが `rule == "edge"` だけ抜いて JSONL 化する。
+7. JSONL から DOT / SVG / Mermaid / cycle 検出を派生生成する。
+
+つまり、やっていることは Ruby の **実行結果** を見るのではなく、
+Ruby の **名前付き構造** を読んで「この定数はどの定数に依存して
+いるか」を近似的に再構成することです。
+
+### これは call graph ではありません
+
+`foo.bar` が実行時に誰を呼ぶかは見ません。`Billing::Invoice`
+という名義上の構造が `ApplicationRecord` / `Auditable` / `Money`
+などの名前に依存している、という **nominal dependency graph** を
+作ります。
+
+Rigor / Prism を使った compiler front-end 的な解析で Ruby の構文
+と lexical context を読み、Ruby/Rails の constant dependency を
+**confidence 付き edge** として graph に射影する、と言えば一番
+近い説明になります。
+
+完全な Ruby constant lookup を再実装しない方針は意図的です。
+Rails の設計把握用途なら、誤って `resolved` と言い切るよりも
+`syntax` / `zeitwerk` / `rigor_type` / `unresolved` で確度を分けて
+出した方が、後で読む人にとって使いやすいです。
+
 ## Status
 
-- **Phase 1 (MVP)**: `inherits` / `include` / `prepend` / `extend`
-  edges, DOT / Mermaid / cycles output, dedup, Rigor-driven AST walk.
-- Phase 2 (Rails path / Zeitwerk owner inference) and Phase 3
-  (Rigor type info for indirect refs) are planned; see `plan.md`.
+- **Phase 0 (spike)** ✅: Rigor plugin API の検証と出力経路の確定
+  （`:info` diagnostic 経由）。
+- **Phase 1 (MVP)** ✅: `inherits` / `include` / `prepend` /
+  `extend` edges, DOT / Mermaid / cycles output, dedup,
+  Rigor-driven AST walk。
+- **Phase 2** (planned): Rails path / Zeitwerk owner inference。
+- **Phase 3** (planned): Rigor type info で indirect ref を補正。
+- **Phase 4** (planned): kind filter / namespace fan-in fan-out。
+- 詳細は `plan.md`。
 
 ## Installation
 
