@@ -1,0 +1,18 @@
+digraph ruby_modules {
+  rankdir=LR;
+  graph [compound=true, overlap=false, splines=true];
+  node [shape=box, style="rounded,filled", fillcolor="#f8fafc", color="#94a3b8", fontname="Helvetica"];
+  edge [color="#64748b", arrowsize=0.7, fontname="Helvetica"];
+  "ApplicationRecord";
+  "Auditable";
+  "Billing::Invoice";
+  "Money";
+  "Searchable";
+  "Tracked";
+
+  "Billing::Invoice" -> "ApplicationRecord" [label="inherits", color="#0f172a", penwidth=2.0];
+  "Billing::Invoice" -> "Auditable" [label="include", color="#1d4ed8"];
+  "Billing::Invoice" -> "Tracked" [label="prepend", color="#9333ea"];
+  "Billing::Invoice" -> "Searchable" [label="extend", color="#0f766e", style="dashed"];
+  "Billing::Invoice" -> "Money" [label="const_ref", color="#94a3b8", style="dotted"];
+}

@@ -1,0 +1,6 @@
+{"from":"Billing::Invoice","to":"ApplicationRecord","kind":"inherits","path":"app/models/billing/invoice.rb","line":2,"column":3,"confidence":"syntax"}
+{"from":"Billing::Invoice","to":"Auditable","kind":"include","path":"app/models/billing/invoice.rb","line":3,"column":5,"confidence":"syntax"}
+{"from":"Billing::Invoice","to":"Searchable","kind":"extend","path":"app/models/billing/invoice.rb","line":5,"column":5,"confidence":"syntax"}
+{"from":"Billing::Invoice","to":"Tracked","kind":"prepend","path":"app/models/billing/invoice.rb","line":4,"column":5,"confidence":"syntax"}
+{"from":"Billing::Payment","to":"ApplicationRecord","kind":"inherits","path":"app/models/billing/payment.rb","line":2,"column":3,"confidence":"syntax"}
+{"from":"Billing::Payment","to":"Auditable","kind":"include","path":"app/models/billing/payment.rb","line":3,"column":5,"confidence":"syntax"}

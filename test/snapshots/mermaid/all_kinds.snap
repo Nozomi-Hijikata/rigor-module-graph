@@ -1,0 +1,24 @@
+flowchart LR
+  n0["ApplicationRecord"]
+  n1["Auditable"]
+  n2["Billing::Invoice"]
+  n3["Money"]
+  n4["Searchable"]
+  n5["Tracked"]
+
+  n2 ==>|inherits| n0
+  n2 -->|include| n1
+  n2 -->|prepend| n5
+  n2 -.->|extend| n4
+  n2 -.->|const_ref| n3
+
+classDef inherits fill:#0f172a,color:#fff,stroke:#0f172a;
+classDef include fill:#1d4ed8,color:#fff,stroke:#1d4ed8;
+classDef prepend fill:#9333ea,color:#fff,stroke:#9333ea;
+classDef extend fill:#0f766e,color:#fff,stroke:#0f766e;
+classDef const_ref fill:#cbd5e1,color:#0f172a,stroke:#94a3b8;
+  class n0 inherits;
+  class n1 include;
+  class n5 prepend;
+  class n4 extend;
+  class n3 const_ref;

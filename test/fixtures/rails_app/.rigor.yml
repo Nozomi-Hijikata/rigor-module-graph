@@ -1,0 +1,6 @@
+target_ruby: '4.0'
+paths:
+  - app
+plugins:
+  - gem: rigor-module-graph
+disable: []

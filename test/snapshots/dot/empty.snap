@@ -1,0 +1,6 @@
+digraph ruby_modules {
+  rankdir=LR;
+  graph [compound=true, overlap=false, splines=true];
+  node [shape=box, style="rounded,filled", fillcolor="#f8fafc", color="#94a3b8", fontname="Helvetica"];
+  edge [color="#64748b", arrowsize=0.7, fontname="Helvetica"];
+}
