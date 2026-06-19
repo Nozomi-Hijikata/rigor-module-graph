@@ -1,0 +1,431 @@
+# Rigor Module Graph Plan
+
+## 目的
+
+Ruby/Rails の class/module/constant 依存を Rigor 上で抽出し、Graphviz DOT / SVG と Mermaid に出力する。
+
+既存の近いツールとの差別化は、package 単位ではなく Ruby の class/module/constant 単位で、以下の依存を分類して可視化する点に置く。
+
+- `class A < B` の継承
+- `include M` / `prepend M` / `extend M` の mixin
+- 定数参照による依存
+- Rails/Zeitwerk の autoload 規約に寄せた名前解決
+- 循環依存検出
+- namespace 単位の collapse
+
+位置づけは「class/module 版 Graphwerk」。Packwerk/Graphwerk が package 境界を見るのに対して、こちらは Ruby の nominal な構造と constant reference を見る。
+
+## 現時点の前提
+
+2026-06-19 時点では、`rigortype` の最新は `0.2.1`（2026-06-18 publish）。gem 名は `rigortype`、実行コマンドは `rigor`、要求 Ruby は `>= 4.0.0, < 4.1`。
+
+Rigor は Prism で Ruby を parse し、flow-sensitive inference を行う。外部 plugin は `Rigor::Plugin::Base` を継承し、`manifest` を宣言し、load 時に `Rigor::Plugin.register(...)` する。
+
+提示メモの `diagnostics_for_file(path:, scope:, root:)` + `root.accept(Visitor)` でも実現はできるが、現行の plugin authoring では `node_rule Prism::...` が第一候補。Rigor 本体が AST walk を一度だけ行い、plugin は該当 node だけを処理する。`diagnostics_for_file` は file 全体を見ないと表現しづらい検査向けに残す。
+
+特にこの計画では、`node_rule` に渡される `context` の lexical ancestor 情報と `scope.type_of(node)` を使えることが大きい。単純な Prism visitor より、Rigor を使う意味が出る。
+
+参考:
+
+- Rigor: https://rigor.typedduck.fail/
+- RubyGems rigortype: https://rubygems.org/gems/rigortype
+- Plugin authoring skill: https://github.com/rigortype/rigor/tree/main/skills/rigor-plugin-author
+- Plugin base source: https://github.com/rigortype/rigor/blob/main/lib/rigor/plugin/base.rb
+
+### Phase 0 spike で確定したこと（2026-06-19）
+
+rigortype 0.2.1 を実機で動かして以下を確認した。詳細はこの plan の各セクション末尾に反映してある。
+
+- `Rigor::Plugin::Base.node_rule(Prism::ClassNode)` の signature は plan の想定通り `|node, scope, path, file_context, context|`。`context` は `Rigor::Plugin::NodeContext`、`context.ancestors` で外側全部、`context.enclosing_module` で innermost ClassNode/ModuleNode が取れる。
+- `Rigor::Plugin.register(Plugin)` も実在。`.rigor.yml` の `plugins: - gem: rigor-module-graph` は内部で `require "rigor-module-graph"` を呼ぶ。
+- **rigortype 0.2.1 は rbs `~> 4.0` が必須**。stdlib bundled の rbs 3.10 で動かすと `RBS::Environment::ClassEntry#each_decl` が無く `internal analyzer error` で全 diagnostic が死ぬ。`Gemfile` で `gem "rbs", "~> 4.0"` を pin する。Ruby 4.0.0 stdlib 同梱は 3.10.4 なので、Bundler の resolver に頼る。
+- `rigor init` が作るのは `.rigor.yml` ではなく `.rigor.dist.yml`。実運用では rename か自分で書く。
+- Rigor は自分自身を Gemfile の RBS 未カバーとして `rbs.coverage.missing-gem` の `:info` diagnostic を `.rigor.yml` 起点で吐く。`collect` 側で `rule == "edge"` フィルタを通せば無害。
+- spike 中に `inherits` edge の owner バグを発見：`class Billing::Invoice < ApplicationRecord` の `node.constant_path.full_name` は `"Invoice"` を返し、外側の `module Billing` が混ざらない。`from` は `context.ancestors` を辿って組み立てる必要がある（後述 §3）。
+
+## 作るもの
+
+最初から汎用 gem として作る。
+
+```text
+rigor-module-graph/
+├── README.md
+├── rigor-module-graph.gemspec
+├── Gemfile
+├── lib/
+│   ├── rigor-module-graph.rb
+│   └── rigor/module_graph/
+│       ├── plugin.rb
+│       ├── analyzer.rb
+│       ├── edge.rb
+│       ├── constant_name.rb
+│       ├── writer.rb
+│       ├── dot.rb
+│       ├── mermaid.rb
+│       └── cycle_detector.rb
+├── exe/
+│   └── rigor-module-graph
+├── sig/
+└── test/
+    ├── fixtures/
+    ├── snapshots/
+    └── rigor_module_graph_test.rb
+```
+
+利用イメージ:
+
+```sh
+mise use ruby@4.0
+mise use gem:rigortype
+
+RUBYLIB="$PWD/lib" rigor check app lib
+rigor-module-graph dot .rigor/module_graph/edges.jsonl > module_graph.dot
+dot -Tsvg module_graph.dot -o module_graph.svg
+```
+
+`.rigor.yml`:
+
+```yaml
+paths:
+  - app
+  - lib
+plugins:
+  - gem: rigor-module-graph
+    config:
+      output: .rigor/module_graph/edges.jsonl
+      include_constant_refs: true
+      collapse_namespaces: []
+      rails_zeitwerk: true
+```
+
+## グラフモデル
+
+まずは edge を JSONL で保存する。DOT は派生物にする。
+
+```json
+{"from":"Billing::Invoice","to":"ApplicationRecord","kind":"inherits","path":"app/models/billing/invoice.rb","line":1,"confidence":"syntax"}
+{"from":"Billing::Invoice","to":"Auditable","kind":"include","path":"app/models/billing/invoice.rb","line":3,"confidence":"resolved"}
+{"from":"Billing::Invoice","to":"Money","kind":"const_ref","path":"app/models/billing/invoice.rb","line":12,"confidence":"resolved"}
+```
+
+edge の基本フィールド:
+
+- `from`: 依存元 class/module
+- `to`: 依存先 class/module/constant
+- `kind`: `inherits` / `include` / `prepend` / `extend` / `const_ref`
+- `path`, `line`, `column`: 発生箇所
+- `confidence`: `syntax` / `zeitwerk` / `rigor_type` / `unresolved`
+- `raw`: 元 AST から取れた表記。名前解決に失敗した時の確認用
+
+DOT では kind ごとに線種を変える。
+
+- `inherits`: 太線
+- `include`: 実線
+- `prepend`: 実線 + distinct color
+- `extend`: 破線
+- `const_ref`: 薄い dotted
+
+## 実装方針
+
+### 1. 抽出は `node_rule` 中心
+
+Plugin skeleton:
+
+```ruby
+require "rigor/plugin"
+
+module Rigor
+  module ModuleGraph
+    class Plugin < Rigor::Plugin::Base
+      manifest(
+        id: "module-graph",
+        version: "0.1.0",
+        description: "Extract Ruby class/module/constant dependency graph"
+      )
+
+      node_rule Prism::ClassNode do |node, scope, path, _file_context, context|
+        Analyzer.new(scope:, path:, context:).class_edges(node)
+      end
+
+      node_rule Prism::ModuleNode do |node, scope, path, _file_context, context|
+        Analyzer.new(scope:, path:, context:).module_edges(node)
+      end
+
+      node_rule Prism::CallNode do |node, scope, path, _file_context, context|
+        Analyzer.new(scope:, path:, context:).call_edges(node)
+      end
+
+      node_rule Prism::ConstantReadNode do |node, scope, path, _file_context, context|
+        Analyzer.new(scope:, path:, context:).constant_edges(node)
+      end
+
+      node_rule Prism::ConstantPathNode do |node, scope, path, _file_context, context|
+        Analyzer.new(scope:, path:, context:).constant_edges(node)
+      end
+    end
+
+    Rigor::Plugin.register(Plugin)
+  end
+end
+```
+
+edge は各 `node_rule` から `severity: :info`, `rule: "edge"`, `source_family: "plugin.module-graph"` の diagnostic として返す。`message` に edge の JSON payload を入れ、`path`/`line`/`column` は diagnostic 側のフィールドに任せる（二重に持たない）。
+
+採用理由（Phase 0 spike の検証結果）:
+
+- side-effect なし。Rigor の実行モデル（`Cache::Store#fetch_or_validate`、`--workers` Ractor 並列）に乗る。
+- 同じ fixture を二回 `rigor check --format json` で流して結果が決定的だった。
+- wrapper command が `rigor check --format json` の `diagnostics` 配列を `source_family == "plugin.module-graph"` + `rule == "edge"` でフィルタすれば、Rigor 本体が吐く他の info（例：`rbs.coverage.missing-gem`）と混ざらない。
+
+代替案として検討した「plugin が JSONL に side-effect append する」は、`node_rule` が file 単位で走るためのキャッシュ無効化／Ractor worker 越しの共有書き込みの両方を自前で面倒見ることになり、stale を許容しないなら毎回 `--no-cache` + 出力削除が必要になる。option 2 はその全部を engine 側の保証で吸収できるので採用しない理由がない。
+
+### 2. 名前解決は 3 段階
+
+Phase 1 は syntax only。
+
+- lexical nesting から `Billing::Invoice` のような current owner を作る
+- `A::B` のような明示 constant path を文字列化する
+- `include Foo` などの bare constant はそのまま `Foo` とする
+
+Phase 2 で Zeitwerk 風補正を入れる。
+
+- `app/models/billing/invoice.rb` -> `Billing::Invoice`
+- `app/services/foo/bar_baz.rb` -> `Foo::BarBaz`
+- `concerns` など Rails 特有 directory を設定で調整
+- `::Foo` の absolute constant と lexical relative constant を分ける
+
+Phase 3 で Rigor の情報を使う。
+
+- `scope.type_of(arg)` が nominal constant を返せる場合はそちらを優先
+- `include SOME_CONST` のような indirect reference は、type が十分確実な時だけ resolved edge にする
+- 不確実なら `confidence: "unresolved"` として捨てずに残す
+
+ここで無理に Ruby の constant lookup を完全再実装しない。Graph は architectural insight 用なので、誤った resolved edge を作るより、unresolved として出す方が有用。
+
+### 3. current owner の扱い
+
+`context.enclosing_module` だけでは class/module の完全名が足りないため、`ConstantName` helper を切る。Phase 0 spike でも `class Billing::Invoice` の `node.constant_path.full_name` が `"Invoice"` を返して外側の `module Billing` が混ざらないことを実機確認した。
+
+owner 組み立てのルール:
+
+- `context.ancestors` を outer→inner で走査し、`Prism::ClassNode` / `Prism::ModuleNode` だけ抽出する
+- 各 node の `constant_path.full_name`（`ConstantPathNode`）または `constant_path.name.to_s`（`ConstantReadNode`）を `"::"` で join
+- 自分自身もこの列に加える。たとえば spike fixture の `module Billing { class Invoice }` は `["Billing", "Invoice"]` → `"Billing::Invoice"`
+
+対応する AST:
+
+- `class Foo`
+- `class Foo::Bar`
+- `module Foo`
+- `module Foo::Bar`
+- `class << self` は owner を変えないか、`Foo.singleton_class` として別扱いするかを後で判断
+
+ネスト表記とパス表記の違いは重要。
+
+```ruby
+module A
+  class B
+  end
+end
+
+class A::C
+end
+```
+
+前者は lexical nesting が `A -> A::B`。後者は `A::C` だが、Ruby の lexical lookup は異なる。可視化の owner はどちらも完全名にするが、名前解決の confidence には差を残す。
+
+### 4. 出力機能
+
+`rigor-module-graph` executable に subcommand を持たせる。
+
+```sh
+rigor-module-graph collect app lib
+rigor-module-graph dot .rigor/module_graph/edges.jsonl > module_graph.dot
+rigor-module-graph svg .rigor/module_graph/edges.jsonl > module_graph.svg
+rigor-module-graph mermaid .rigor/module_graph/edges.jsonl > module_graph.mmd
+rigor-module-graph cycles .rigor/module_graph/edges.jsonl
+```
+
+`collect` は wrapper として Rigor を呼ぶ。Rigor の config override が可能なら一時 config を使う。難しければ README で `.rigor.yml` に plugin を追加する方式から始める。
+
+DOT 生成の初期設定:
+
+```dot
+digraph ruby_modules {
+  rankdir=LR;
+  graph [compound=true, overlap=false, splines=true];
+  node [shape=box, style="rounded,filled", fillcolor="#f8fafc", color="#94a3b8"];
+  edge [color="#64748b", arrowsize=0.7];
+}
+```
+
+namespace collapse は DOT の `subgraph cluster_...` で表現する。
+
+## フェーズ
+
+### Phase 0: Rigor plugin API spike ✅（2026-06-19 完了）
+
+目的は「edge を安定して取り出せるか」を確定すること。
+
+- `rigortype 0.2.x` を pin → 0.2.1 で実機検証済み
+- 最小 plugin を作る → done
+- `rigor plugin list`, `rigor plugin print`, `rigor plugin root` で実 API を確認 → done
+- `node_rule Prism::ClassNode` / `Prism::CallNode` が動く fixture を作る → done
+- 出力経路を JSONL side-effect と info diagnostic のどちらにするか決める → **option 2（info diagnostic）採用**
+
+完了条件:
+
+- fixture の `module A; class B::C < D; include E; prepend F; extend G; end; end` から `inherits` / `include` / `prepend` / `extend` の 4 edge が取れる → 取れた
+- 同じ fixture を 2 回実行して stale / duplicate output にならない → 出力差分なしを確認
+
+副産物:
+
+- rbs 4.x が必須という pin 制約を発見
+- `class A::B` の `from` 組み立てバグを発見（実装の `ConstantName` ヘルパーで対応）
+- `rbs.coverage.missing-gem` の info diagnostic 混入を確認（`rule == "edge"` で除外）
+
+### Phase 1: MVP
+
+対象:
+
+- `class` / `module`
+- superclass
+- `include` / `prepend` / `extend`
+- 明示的な constant path
+- DOT / SVG 出力
+
+対象外:
+
+- indirect constant resolution
+- Rails DSL
+- dynamic metaprogramming
+- perfect constant lookup
+
+完了条件:
+
+- 小さい Rails 風 fixture で DOT と SVG が生成できる
+- edge JSONL の snapshot test がある
+- DOT 出力の重複 edge が dedup される
+
+### Phase 2: Rails/Zeitwerk 対応
+
+対象:
+
+- `app/models`, `app/controllers`, `app/services`, `app/jobs`, `lib` の path -> constant 推定
+- Rails concern directory の扱い
+- `ApplicationRecord`, `ApplicationController` などのよくある base class
+- namespace collapse
+
+完了条件:
+
+- Rails 風 directory fixture で owner 推定が期待通り
+- collapse あり/なしの DOT snapshot がある
+
+### Phase 3: Rigor 型情報による補正
+
+対象:
+
+- `scope.type_of(node)` を使った confidence 向上
+- `include SOME_CONST` のような間接参照
+- RBS / Sorbet 経由で見える定数名の活用
+- resolved / unresolved の区別を CLI で filter 可能にする
+
+完了条件:
+
+- syntax だけでは unresolved になる fixture が、Rigor 情報で resolved になる
+- 不明な type carrier で plugin が落ちず、edge を捨てるか unresolved に degrade する
+
+### Phase 4: 分析機能
+
+対象:
+
+- strongly connected components による循環検出
+- `kind` ごとの filter
+- owner namespace ごとの fan-in / fan-out
+- “この namespace から外へ出ている依存” の集計
+- package boundary file がある場合の package overlay
+
+完了条件:
+
+- `rigor-module-graph cycles` が循環を短い path で表示する
+- `--only include,inherits` などで noise を落とせる
+
+## テスト方針
+
+テストは Minitest を基本にする。edge JSONL / DOT / Mermaid のような出力比較は `minitest-snapshot` を使い、手書き expected 文字列ではなく snapshot ベースで管理する。
+
+`Gemfile` / gemspec の development dependency には少なくとも以下を入れる。
+
+- `minitest`
+- `minitest-snapshot`
+
+plugin wiring は Rigor CLI 経由で見る。Rigor 内部 helper には依存しない。
+
+- fixture project に `.rigor.yml` と sample Ruby を置く
+- `rigor check --format json` または wrapper command を実行
+- edge JSONL / DOT / Mermaid を `minitest-snapshot` で snapshot test
+- `Analyzer`, `ConstantName`, `Dot`, `CycleDetector` は通常の unit test
+- snapshot は `test/snapshots/` に置き、fixture ごとの期待出力をレビューしやすくする
+
+重要な fixture:
+
+- simple inheritance
+- nested module
+- explicit namespace class (`class A::B`)
+- include/prepend/extend
+- constant reference in method body
+- absolute constant (`::Foo`)
+- Rails-style path owner inference
+- unresolved constant
+- duplicate edges
+- cycle
+
+## 主要リスク
+
+1. Rigor plugin API はまだ新しい
+   - `rigortype` の minor version を tight に pin する
+   - fixture-driven CLI test を厚くする
+   - README に対応 Rigor version を明記する
+
+2. Graph 出力と Rigor cache の相性（Phase 0 で解決済み）
+   - info diagnostic 経路を採用したので、side-effect JSONL の stale 問題は構造的に発生しない
+   - 残るのは Rigor 自体の per-file キャッシュで `node_rule` がスキップされた時に diagnostic が再出力されない可能性。`collect` 時に `--no-cache` を強制するかは実装で評価
+   - `rigor-module-graph collect` は `--no-cache` を既定 on にし、graph を「毎回 fresh」で生成する。性能が気になるなら opt-out 可能にする
+
+3. Ruby constant lookup は完全再現が難しい
+   - confidence を出す
+   - resolved できない edge を無理に resolved にしない
+   - Rails/Zeitwerk は設定可能にする
+
+4. constant reference edge は noise が多い
+   - kind filter を初期から入れる
+   - `const_ref` は薄い線にする
+   - namespace collapse を早めに入れる
+
+## 最初に切る実装タスク
+
+1. gem skeleton を作る（`rigor-module-graph.gemspec`、`Gemfile` に `rigortype ~> 0.2.1` と `rbs ~> 4.0`）
+2. `ConstantName` ヘルパー（`context.ancestors` から fully-qualified owner を組み立てる）
+3. `Rigor::ModuleGraph::Edge` と JSONL writer を作る（dedup 含む）
+4. `Prism::ClassNode` から `inherits` edge を取る（owner は §3 のルールで組み立てる）
+5. `Prism::CallNode` から `include` / `prepend` / `extend` edge を取る
+6. plugin が `severity: :info`, `rule: "edge"`, `source_family: "plugin.module-graph"` で diagnostic を返すよう wire する
+7. `rigor-module-graph collect` を実装：`rigor check --format json --no-cache` を子プロセスで走らせ、`rule == "edge"` のみ抽出して `.rigor/module_graph/edges.jsonl` に書き出す
+8. fixture を Rigor CLI で通す（`RUBYLIB="$PWD/lib"` または bundler 経由）
+9. Minitest + `minitest-snapshot` の test harness を用意し、edge JSONL / DOT / Mermaid の snapshot test を作る
+10. `edges_to_dot` を `rigor-module-graph dot` として実装する
+11. `dot -Tsvg` で SVG 描画を確認する
+
+## 初期スコープの判断
+
+最初から “名前解決込みで完璧” を狙わない。MVP は syntax edge を正確に取り、`confidence` を持つ graph format を固める。
+
+価値が出る順番は以下。
+
+1. 継承と mixin が見える
+2. Rails path から owner が見える
+3. namespace collapse で読める
+4. 循環が見える
+5. Rigor type info で indirect reference が補正される
+
+この順に進めると、早い段階で Graphwerk との差分を示せる。
