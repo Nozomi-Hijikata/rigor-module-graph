@@ -18,7 +18,7 @@ Gem::Specification.new do |spec|
   spec.license = "MIT"
   spec.required_ruby_version = ">= 4.0.0", "< 4.1"
 
-  spec.files = Dir["lib/**/*.rb", "exe/*", "README.md", "LICENSE.txt"]
+  spec.files = Dir["lib/**/*.rb", "lib/**/*.erb", "exe/*", "README.md", "LICENSE.txt"]
   spec.bindir = "exe"
   spec.executables = ["rigor-module-graph"]
   spec.require_paths = ["lib"]

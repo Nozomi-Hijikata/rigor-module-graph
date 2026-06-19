@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>rigor-module-graph: billing example</title>
+    <title><%= title %></title>
     <script type="module">
       import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
       mermaid.initialize({
@@ -29,46 +29,13 @@
     </style>
   </head>
   <body>
-    <h1>rigor-module-graph: billing example</h1>
-          <p class="meta">Generated from examples/billing/app</p>
-        <div class="card">
+    <h1><%= title %></h1>
+    <% if subtitle -%>
+      <p class="meta"><%= subtitle %></p>
+    <% end -%>
+    <div class="card">
       <pre class="mermaid">
-flowchart LR
-    subgraph sg_Billing ["Billing"]
-      n2["Invoice"]
-      n3["LineItem"]
-      n4["Payment"]
-    end
-    n0["ApplicationRecord"]
-    n1["Auditable"]
-    n5["Discountable"]
-    n6["Searchable"]
-    n7["Tracked"]
-  
-    n2 ==>|inherits| n0
-    n2 -->|include| n1
-    n2 -->|include| n5
-    n2 -->|prepend| n7
-    n2 -.->|extend| n6
-    n3 ==>|inherits| n0
-    n3 -->|include| n1
-    n3 -.->|extend| n6
-    n4 ==>|inherits| n0
-    n4 -->|include| n1
-    n4 -->|prepend| n7
-    n5 -->|include| n1
-  
-  classDef inherits fill:#0f172a,color:#fff,stroke:#0f172a;
-  classDef include fill:#1d4ed8,color:#fff,stroke:#1d4ed8;
-  classDef prepend fill:#9333ea,color:#fff,stroke:#9333ea;
-  classDef extend fill:#0f766e,color:#fff,stroke:#0f766e;
-  classDef const_ref fill:#cbd5e1,color:#0f172a,stroke:#94a3b8;
-  classDef unresolved fill:#fef3c7,color:#0f172a,stroke:#d97706,stroke-dasharray: 4 4;
-    class n0 inherits;
-    class n1 include;
-    class n5 include;
-    class n7 prepend;
-    class n6 extend;
+<%= indented_mermaid %>
       </pre>
     </div>
     <div class="legend">

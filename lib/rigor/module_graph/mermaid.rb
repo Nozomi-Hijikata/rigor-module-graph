@@ -51,11 +51,42 @@ module Rigor
         end
         out << "\n"
         out << CLASS_DEFS
-        edges.each do |edge|
-          tag = edge.confidence == "unresolved" ? "unresolved" : edge.kind
-          out << "  class #{node_ids[edge.to]} #{tag};\n"
-        end
+        # One class assignment per node id. Mermaid silently keeps
+        # the last assignment but starts to error out when the same
+        # `class N kind;` line repeats many hundreds of times in a
+        # large graph, so we dedupe and pick the most structural
+        # kind per node (inherits > include > prepend > extend >
+        # const_ref) so the resulting colour conveys intent.
+        out << render_class_assignments(edges, node_ids)
         out
+      end
+
+      KIND_PRIORITY = {
+        "inherits" => 0,
+        "include" => 1,
+        "prepend" => 2,
+        "extend" => 3,
+        "const_ref" => 4
+      }.freeze
+
+      def render_class_assignments(edges, node_ids)
+        per_node = {}
+        edges.each do |edge|
+          id = node_ids[edge.to]
+          tag = edge.confidence == "unresolved" ? "unresolved" : edge.kind
+          current = per_node[id]
+          if current.nil? || better_tag?(tag, current)
+            per_node[id] = tag
+          end
+        end
+        per_node.map { |id, tag| "  class #{id} #{tag};\n" }.join
+      end
+
+      def better_tag?(candidate, current)
+        return false if current == "unresolved"
+        return true if candidate == "unresolved"
+
+        (KIND_PRIORITY[candidate] || 99) < (KIND_PRIORITY[current] || 99)
       end
 
       def dedup(edges)

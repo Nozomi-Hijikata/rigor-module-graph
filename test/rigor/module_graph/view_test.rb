@@ -8,18 +8,32 @@ class ViewTest < Minitest::Test
   CLI = Rigor::ModuleGraph::CLI
   Edge = Rigor::ModuleGraph::Edge
 
-  def test_effective_collapse_picks_namespaces_with_multiple_members
+  def test_effective_collapse_picks_namespaces_with_enough_members
     edges = [
       Edge.build(from: "Billing::Invoice", to: "Auditable", kind: "include"),
       Edge.build(from: "Billing::Payment", to: "Auditable", kind: "include"),
+      Edge.build(from: "Billing::Refund", to: "Auditable", kind: "include"),
       Edge.build(from: "Auth::User", to: "Concern", kind: "include"),
+      Edge.build(from: "Auth::Session", to: "Concern", kind: "include"),
       Edge.build(from: "Toplevel", to: "ApplicationRecord", kind: "inherits")
     ]
     view = build_view
-    # Billing has 2 members → collapsed. Auth has 1 → skipped.
-    # Toplevel / ApplicationRecord / Concern / Auditable have no
-    # `::` so they aren't collapse candidates.
+    # Billing has 3 members → collapsed. Auth has 2 → below the
+    # default threshold of 3. Toplevel / ApplicationRecord /
+    # Concern / Auditable have no `::` so they aren't candidates.
     assert_equal ["Billing"], view.effective_collapse(edges)
+  end
+
+  def test_effective_collapse_skips_absolute_path_empty_head
+    # `::Foo` splits to ["", "Foo"] — without the empty-head
+    # guard this would surface as a bogus "" collapse target.
+    edges = [
+      Edge.build(from: "::Foo", to: "Bar", kind: "inherits"),
+      Edge.build(from: "::Foo", to: "Baz", kind: "include"),
+      Edge.build(from: "::Foo", to: "Qux", kind: "include")
+    ]
+    view = build_view
+    refute_includes view.effective_collapse(edges), ""
   end
 
   def test_effective_collapse_respects_explicit_override
@@ -37,12 +51,13 @@ class ViewTest < Minitest::Test
   end
 
   def test_effective_collapse_does_not_pick_deep_prefixes
-    # `Billing::Invoice::Line` and `Billing::Invoice::Item` would
-    # be a candidate for the `Billing::Invoice` prefix, but we
-    # only consider top-level prefixes so a graph stays readable.
+    # `Billing::Invoice::Line` / Item / Foo all roll up to the
+    # top-level `Billing` cluster — we never pick the intermediate
+    # `Billing::Invoice` prefix because nested clusters compete.
     edges = [
       Edge.build(from: "Billing::Invoice::Line", to: "Auditable", kind: "include"),
-      Edge.build(from: "Billing::Invoice::Item", to: "Auditable", kind: "include")
+      Edge.build(from: "Billing::Invoice::Item", to: "Auditable", kind: "include"),
+      Edge.build(from: "Billing::Invoice::Foo", to: "Auditable", kind: "include")
     ]
     view = build_view
     assert_equal ["Billing"], view.effective_collapse(edges)
@@ -54,6 +69,15 @@ class ViewTest < Minitest::Test
     subtitle = view.render_subtitle(edges, ["Billing"])
     assert_includes subtitle, "1 edge(s)"
     assert_includes subtitle, "collapsed: Billing"
+  end
+
+  def test_render_subtitle_truncates_long_collapse_lists
+    view = build_view
+    collapse = %w[A B C D E F G H I J]
+    subtitle = view.render_subtitle([], collapse)
+    # Preview window is 6; the rest is summarised so the trailer
+    # doesn't grow unbounded on a large project.
+    assert_includes subtitle, "collapsed: A, B, C, D, E, F (+4 more)"
   end
 
   def test_render_subtitle_omits_collapse_when_empty

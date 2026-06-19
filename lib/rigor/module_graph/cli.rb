@@ -11,6 +11,7 @@ require_relative "edge"
 require_relative "dot"
 require_relative "mermaid"
 require_relative "cycle_detector"
+require_relative "reachability"
 require_relative "html_view"
 
 module Rigor
@@ -80,14 +81,16 @@ module Rigor
         Run `rigor-module-graph <command> --help` for command-specific options.
       USAGE
 
-      # Shared filter options reused by dot / mermaid / cycles.
+      # Shared filter options reused by dot / mermaid / cycles / view.
       module EdgeFilters
         VALID_KINDS = Rigor::ModuleGraph::EDGE_KINDS
         VALID_CONFIDENCES = Rigor::ModuleGraph::EDGE_CONFIDENCES
+        VALID_DIRECTIONS = Reachability::VALID_DIRECTIONS
 
-        def apply_filters(edges, kinds:, confidences:)
+        def apply_filters(edges, kinds:, confidences:, from: nil, depth: nil, direction: :both)
           edges = edges.select { |e| kinds.include?(e.kind) } if kinds
           edges = edges.select { |e| confidences.include?(e.confidence) } if confidences
+          edges = Reachability.filter(edges, roots: from, depth: depth, direction: direction) if from && !from.empty?
           edges
         end
 
@@ -99,6 +102,18 @@ module Rigor
           opts.on("--confidence LEVELS", Array,
                   "Only render the listed confidence levels (#{VALID_CONFIDENCES.join(",")})") do |list|
             state[:confidences] = validate!(list, VALID_CONFIDENCES, "confidence")
+          end
+          opts.on("--from NAMES", Array,
+                  "Restrict the graph to nodes reachable from NAMES (comma-separated)") do |names|
+            state[:from] = names
+          end
+          opts.on("--depth N", Integer,
+                  "Maximum hops from --from roots (default: unlimited)") do |n|
+            state[:depth] = n
+          end
+          opts.on("--direction DIR", VALID_DIRECTIONS.map(&:to_s),
+                  "Direction to follow from --from roots (#{VALID_DIRECTIONS.join(", ")}; default: both)") do |dir|
+            state[:direction] = dir.to_sym
           end
         end
 
@@ -255,7 +270,16 @@ module Rigor
         include EdgeFilters
 
         DEFAULT_OUTPUT = ".rigor/module_graph/view.html"
-        AUTO_COLLAPSE_THRESHOLD = 2
+        # An auto-collapsed cluster needs at least this many
+        # members before it's worth folding. Three is the sweet
+        # spot empirically: a 1500-edge Rails app collapses into
+        # roughly the right shape, and a small fixture still
+        # leaves trivial Foo / Bar pairs uncollapsed.
+        AUTO_COLLAPSE_THRESHOLD = 3
+        # Cap the visible "collapsed: …" trailer in the subtitle
+        # so it doesn't grow into an unreadable wall on large
+        # projects.
+        SUBTITLE_COLLAPSE_PREVIEW = 6
 
         def initialize(stdout:, stderr:)
           @stdout = stdout
@@ -267,7 +291,10 @@ module Rigor
             open: true,
             collapse: nil,
             kinds: nil,
-            confidences: nil
+            confidences: nil,
+            from: nil,
+            depth: nil,
+            direction: :both
           }
         end
 
@@ -278,7 +305,14 @@ module Rigor
           ensure_output_dir
           runner = RigorRunner.new(rigor_cmd: @options[:rigor_cmd], cache: @options[:cache])
           edges = runner.edges_for(paths)
-          edges = apply_filters(edges, kinds: @options[:kinds], confidences: @options[:confidences])
+          edges = apply_filters(
+            edges,
+            kinds: @options[:kinds],
+            confidences: @options[:confidences],
+            from: @options[:from],
+            depth: @options[:depth],
+            direction: @options[:direction]
+          )
           collapse = effective_collapse(edges)
 
           mermaid = Mermaid.render(edges, collapse: collapse)
@@ -351,6 +385,10 @@ module Rigor
               # would compete with each other and produce nested
               # clusters that hurt readability.
               next if tail.nil? || tail.empty?
+              # Absolute paths (`::Foo::Bar`) split with an empty
+              # head; skip them so they don't surface as the bogus
+              # `""` collapse target.
+              next if head.empty?
 
               counts[head] << name
             end
@@ -360,7 +398,18 @@ module Rigor
 
         def render_subtitle(edges, collapse)
           parts = ["#{edges.size} edge(s) from #{Dir.pwd}"]
-          parts << "collapsed: #{collapse.join(", ")}" unless collapse.empty?
+          if @options[:from]
+            from_part = +"from: #{Array(@options[:from]).join(", ")}"
+            from_part << " (depth=#{@options[:depth]})" if @options[:depth]
+            from_part << " [#{@options[:direction]}]" unless @options[:direction] == :both
+            parts << from_part
+          end
+          unless collapse.empty?
+            preview = collapse.first(SUBTITLE_COLLAPSE_PREVIEW)
+            label = +"collapsed: #{preview.join(", ")}"
+            label << " (+#{collapse.size - preview.size} more)" if collapse.size > preview.size
+            parts << label
+          end
           parts.join(" · ")
         end
 
@@ -388,7 +437,10 @@ module Rigor
           @stdout = stdout
           @stderr = stderr
           @stdin = stdin
-          @state = { collapse: [], kinds: nil, confidences: nil }
+          @state = {
+            collapse: [], kinds: nil, confidences: nil,
+            from: nil, depth: nil, direction: :both
+          }
         end
 
         def run(argv)
@@ -401,7 +453,14 @@ module Rigor
           ensure
             io.close if path && !io.closed?
           end
-          edges = apply_filters(edges, kinds: @state[:kinds], confidences: @state[:confidences])
+          edges = apply_filters(
+            edges,
+            kinds: @state[:kinds],
+            confidences: @state[:confidences],
+            from: @state[:from],
+            depth: @state[:depth],
+            direction: @state[:direction]
+          )
           @stdout.print(rendered(edges))
           0
         rescue Errno::ENOENT => e
@@ -443,7 +502,10 @@ module Rigor
           @stdout = stdout
           @stderr = stderr
           @stdin = stdin
-          @state = { kinds: nil, confidences: nil }
+          @state = {
+            kinds: nil, confidences: nil,
+            from: nil, depth: nil, direction: :both
+          }
         end
 
         def run(argv)
@@ -456,7 +518,14 @@ module Rigor
           ensure
             io.close if path && !io.closed?
           end
-          edges = apply_filters(edges, kinds: @state[:kinds], confidences: @state[:confidences])
+          edges = apply_filters(
+            edges,
+            kinds: @state[:kinds],
+            confidences: @state[:confidences],
+            from: @state[:from],
+            depth: @state[:depth],
+            direction: @state[:direction]
+          )
           cycles = CycleDetector.detect(edges)
           if cycles.empty?
             @stderr.puts "rigor-module-graph cycles: no cycles found"

@@ -156,8 +156,14 @@ Useful flags:
 # Don't open the browser (just write the HTML)
 rigor-module-graph view --no-open
 
+# Focus on what's around one or a few constants (Mermaid can't
+# render 1000+-node graphs cleanly — this is the escape hatch)
+rigor-module-graph view --from Article --depth 5
+rigor-module-graph view --from Article --depth 5 --direction out
+rigor-module-graph view --from Billing::Invoice,Billing::Payment --depth 2
+
 # Pick your own collapse list (default: auto-detect top-level
-# namespaces that have ≥ 2 members)
+# namespaces with ≥ 3 members)
 rigor-module-graph view --collapse Billing,Auth
 rigor-module-graph view --no-collapse
 
@@ -165,6 +171,14 @@ rigor-module-graph view --no-collapse
 rigor-module-graph view --kind inherits,include
 rigor-module-graph view --confidence syntax,zeitwerk
 ```
+
+`--direction` controls how the +--from+ walk follows edges:
+
+| direction | meaning                                |
+|-----------|----------------------------------------|
+| `out`     | only "what does Article depend on"     |
+| `in`      | only "what depends on Article"         |
+| `both`    | both (default)                         |
 
 ### Lower-level pipeline
 
@@ -207,6 +221,11 @@ bundle exec rigor-module-graph dot --confidence syntax,zeitwerk,rigor_type edges
 # Fold every Billing::* node into one cluster (Dot subgraph_cluster_; Mermaid subgraph)
 bundle exec rigor-module-graph dot     --collapse Billing,Auth edges.jsonl
 bundle exec rigor-module-graph mermaid --collapse Billing edges.jsonl
+
+# Restrict the graph to the neighbourhood of one or a few
+# constants (works on dot / mermaid / cycles too)
+bundle exec rigor-module-graph dot     --from Article --depth 5 edges.jsonl
+bundle exec rigor-module-graph mermaid --from Article --depth 5 --direction out edges.jsonl
 
 # Cycles that stay within structural edges only
 bundle exec rigor-module-graph cycles --kind inherits,include edges.jsonl

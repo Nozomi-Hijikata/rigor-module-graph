@@ -12,3 +12,7 @@
 examples/**/edges.jsonl
 examples/**/graph.mmd
 examples/**/graph.dot
+
+# Ad-hoc preview captures (do not commit project-specific output)
+/.driver-view-preview.png
+/.*-view-preview.png
