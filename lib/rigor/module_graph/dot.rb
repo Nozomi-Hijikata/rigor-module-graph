@@ -11,6 +11,12 @@ module Rigor
     # - prepend: solid, distinct color
     # - extend: dashed
     # - const_ref: faded dotted
+    #
+    # When `collapse:` is given, every node whose fully-qualified
+    # name sits under one of the listed prefixes is wrapped in a
+    # `subgraph cluster_<prefix>` block, and the prefix is stripped
+    # from the visible label. Edges across clusters render normally;
+    # Graphviz routes them between the cluster boundaries.
     module Dot
       module_function
 
@@ -22,6 +28,10 @@ module Rigor
         "const_ref" => 'color="#94a3b8", style="dotted"'
       }.freeze
 
+      CONFIDENCE_STYLE = {
+        "unresolved" => 'style="dashed", color="#94a3b8"'
+      }.freeze
+
       HEADER = <<~DOT
         digraph ruby_modules {
           rankdir=LR;
@@ -30,12 +40,16 @@ module Rigor
           edge [color="#64748b", arrowsize=0.7, fontname="Helvetica"];
       DOT
 
-      def render(edges)
+      def render(edges, collapse: [])
         edges = dedup(edges)
         nodes = collect_nodes(edges)
+        clusters, ungrouped = group_nodes(nodes, collapse)
 
         out = +HEADER
-        nodes.each do |name|
+        clusters.each do |prefix, members|
+          out << render_cluster(prefix, members)
+        end
+        ungrouped.each do |name|
           out << "  #{quote(name)};\n"
         end
         out << "\n" unless nodes.empty?
@@ -61,9 +75,49 @@ module Rigor
         names.uniq.sort
       end
 
+      # Partition nodes into clusters keyed by the matched prefix,
+      # plus a list of names that didn't match any prefix.
+      def group_nodes(nodes, collapse)
+        prefixes = Array(collapse).map(&:to_s).reject(&:empty?)
+        return [{}, nodes] if prefixes.empty?
+
+        sorted = prefixes.sort_by { |p| -p.length }
+        clusters = Hash.new { |h, k| h[k] = [] }
+        ungrouped = []
+        nodes.each do |name|
+          match = sorted.find { |p| name.start_with?(p + "::") }
+          if match
+            clusters[match] << name
+          else
+            ungrouped << name
+          end
+        end
+        [clusters, ungrouped]
+      end
+
+      def render_cluster(prefix, members)
+        out = +"  subgraph #{quote("cluster_" + cluster_id(prefix))} {\n"
+        out << "    label=#{quote(prefix)};\n"
+        out << "    style=\"rounded,filled\";\n"
+        out << "    color=\"#cbd5e1\";\n"
+        out << "    fillcolor=\"#f1f5f9\";\n"
+        members.each do |name|
+          short = name.sub(/\A#{Regexp.escape(prefix)}::/, "")
+          out << "    #{quote(name)} [label=#{quote(short)}];\n"
+        end
+        out << "  }\n"
+      end
+
+      def cluster_id(prefix)
+        prefix.gsub("::", "_")
+      end
+
       def render_edge(edge)
         attrs = +"label=\"#{edge.kind}\""
         if (style = KIND_STYLE[edge.kind])
+          attrs << ", " << style
+        end
+        if (style = CONFIDENCE_STYLE[edge.confidence])
           attrs << ", " << style
         end
         "  #{quote(edge.from)} -> #{quote(edge.to)} [#{attrs}];\n"

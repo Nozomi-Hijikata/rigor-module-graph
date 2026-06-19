@@ -1,6 +1,6 @@
 flowchart LR
-  n0["A"]
-  n1["B"]
+  n0["Foo"]
+  n1["some_variable"]
 
   n0 -->|include| n1
 
@@ -10,4 +10,4 @@ classDef prepend fill:#9333ea,color:#fff,stroke:#9333ea;
 classDef extend fill:#0f766e,color:#fff,stroke:#0f766e;
 classDef const_ref fill:#cbd5e1,color:#0f172a,stroke:#94a3b8;
 classDef unresolved fill:#fef3c7,color:#0f172a,stroke:#d97706,stroke-dasharray: 4 4;
-  class n1 include;
+  class n1 unresolved;

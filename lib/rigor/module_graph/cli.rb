@@ -23,10 +23,9 @@ module Rigor
     #   cycles  [FILE]       Detect cycles and print them
     #
     # Every reader subcommand takes the path to an edges file, or
-    # reads stdin if no path is given. `collect` shells out to the
-    # host project's `rigor` binary; the user is expected to have
-    # `rigor-module-graph` listed in `.rigor.yml` `plugins:` for the
-    # plugin to be loaded.
+    # reads stdin if no path is given. Each reader supports
+    # `--kind` and `--confidence` filters so a noisy graph can be
+    # pruned without touching the JSONL on disk.
     module CLI
       DEFAULT_EDGES_PATH = ".rigor/module_graph/edges.jsonl"
       SOURCE_FAMILY = "plugin.module-graph"
@@ -70,6 +69,38 @@ module Rigor
 
         Run `rigor-module-graph <command> --help` for command-specific options.
       USAGE
+
+      # Shared filter options reused by dot / mermaid / cycles.
+      module EdgeFilters
+        VALID_KINDS = Rigor::ModuleGraph::EDGE_KINDS
+        VALID_CONFIDENCES = Rigor::ModuleGraph::EDGE_CONFIDENCES
+
+        def apply_filters(edges, kinds:, confidences:)
+          edges = edges.select { |e| kinds.include?(e.kind) } if kinds
+          edges = edges.select { |e| confidences.include?(e.confidence) } if confidences
+          edges
+        end
+
+        def add_filter_options(opts, state)
+          opts.on("--kind KINDS", Array,
+                  "Only render the listed edge kinds (#{VALID_KINDS.join(",")})") do |list|
+            state[:kinds] = validate!(list, VALID_KINDS, "kind")
+          end
+          opts.on("--confidence LEVELS", Array,
+                  "Only render the listed confidence levels (#{VALID_CONFIDENCES.join(",")})") do |list|
+            state[:confidences] = validate!(list, VALID_CONFIDENCES, "confidence")
+          end
+        end
+
+        def validate!(list, allowed, label)
+          unknown = list - allowed
+          unless unknown.empty?
+            raise OptionParser::InvalidArgument,
+                  "unknown #{label}(s): #{unknown.join(",")}. Allowed: #{allowed.join(",")}"
+          end
+          list
+        end
+      end
 
       # `collect` shells out to `rigor check --format json` and
       # writes a JSONL edge file by filtering the diagnostics for
@@ -190,42 +221,14 @@ module Rigor
       # Shared base for `dot` / `mermaid` — both load an edges JSONL
       # and print a rendered string.
       class Render
+        include EdgeFilters
+
         def initialize(format, stdout:, stderr:, stdin:)
           @format = format
           @stdout = stdout
           @stderr = stderr
           @stdin = stdin
-        end
-
-        def run(argv)
-          path, = argv
-          io = path ? File.open(path, "r") : @stdin
-          begin
-            edges = EdgeIO.read(io)
-          ensure
-            io.close if path && !io.closed?
-          end
-          @stdout.print(rendered(edges))
-          0
-        rescue Errno::ENOENT => e
-          @stderr.puts "rigor-module-graph #{@format}: #{e.message}"
-          1
-        end
-
-        def rendered(edges)
-          case @format
-          when :dot then Dot.render(edges)
-          when :mermaid then Mermaid.render(edges)
-          end
-        end
-      end
-
-      class Cycles
-        def initialize(stdout:, stderr:, stdin:)
-          @stdout = stdout
-          @stderr = stderr
-          @stdin = stdin
-          @kinds = nil
+          @state = { collapse: [], kinds: nil, confidences: nil }
         end
 
         def run(argv)
@@ -238,7 +241,63 @@ module Rigor
           ensure
             io.close if path && !io.closed?
           end
-          cycles = CycleDetector.detect(edges, kinds: @kinds)
+          edges = apply_filters(edges, kinds: @state[:kinds], confidences: @state[:confidences])
+          @stdout.print(rendered(edges))
+          0
+        rescue Errno::ENOENT => e
+          @stderr.puts "rigor-module-graph #{@format}: #{e.message}"
+          1
+        rescue OptionParser::ParseError => e
+          @stderr.puts "rigor-module-graph #{@format}: #{e.message}"
+          2
+        end
+
+        def parse_options!(argv)
+          parser = OptionParser.new do |opts|
+            opts.banner = "Usage: rigor-module-graph #{@format} [options] [FILE]"
+            opts.on("--collapse PREFIXES", Array,
+                    "Comma-separated namespace prefixes to fold into clusters") do |prefixes|
+              @state[:collapse].concat(prefixes)
+            end
+            add_filter_options(opts, @state)
+            opts.on("-h", "--help") do
+              @stdout.puts opts
+              exit 0
+            end
+          end
+          parser.parse!(argv)
+        end
+
+        def rendered(edges)
+          case @format
+          when :dot then Dot.render(edges, collapse: @state[:collapse])
+          when :mermaid then Mermaid.render(edges, collapse: @state[:collapse])
+          end
+        end
+      end
+
+      class Cycles
+        include EdgeFilters
+
+        def initialize(stdout:, stderr:, stdin:)
+          @stdout = stdout
+          @stderr = stderr
+          @stdin = stdin
+          @state = { kinds: nil, confidences: nil }
+        end
+
+        def run(argv)
+          argv = argv.dup
+          parse_options!(argv)
+          path, = argv
+          io = path ? File.open(path, "r") : @stdin
+          begin
+            edges = EdgeIO.read(io)
+          ensure
+            io.close if path && !io.closed?
+          end
+          edges = apply_filters(edges, kinds: @state[:kinds], confidences: @state[:confidences])
+          cycles = CycleDetector.detect(edges)
           if cycles.empty?
             @stderr.puts "rigor-module-graph cycles: no cycles found"
             0
@@ -254,10 +313,13 @@ module Rigor
         def parse_options!(argv)
           parser = OptionParser.new do |opts|
             opts.banner = "Usage: rigor-module-graph cycles [options] [FILE]"
+            # `--only` kept as an alias for `--kind` for backward
+            # compat with the Phase 1 flag.
             opts.on("--only KINDS", Array,
-                    "Comma-separated edge kinds to include (default: all)") do |kinds|
-              @kinds = kinds
+                    "Alias for --kind") do |kinds|
+              @state[:kinds] = kinds
             end
+            add_filter_options(opts, @state)
             opts.on("-h", "--help") do
               @stdout.puts opts
               exit 0

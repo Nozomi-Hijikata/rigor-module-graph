@@ -307,48 +307,66 @@ namespace collapse は DOT の `subgraph cluster_...` で表現する。
 - edge JSONL の snapshot test がある
 - DOT 出力の重複 edge が dedup される
 
-### Phase 2: Rails/Zeitwerk 対応
+### Phase 2: Rails/Zeitwerk 対応 ✅（2026-06-19 完了）
 
 対象:
 
-- `app/models`, `app/controllers`, `app/services`, `app/jobs`, `lib` の path -> constant 推定
-- Rails concern directory の扱い
-- `ApplicationRecord`, `ApplicationController` などのよくある base class
-- namespace collapse
+- `app/models`, `app/controllers`, `app/services`, `app/jobs`, `lib` の path -> constant 推定 → done（`ZeitwerkResolver`）
+- Rails concern directory の扱い → done（`concern_dirs` で longest-prefix wins）
+- `ApplicationRecord`, `ApplicationController` などのよくある base class → owner 側が `zeitwerk` に昇格、`to` 側は次の Phase
+- namespace collapse → done（Dot は `subgraph cluster_*`、Mermaid は `subgraph`、CLI フラグ `--collapse Billing,Auth`）
+- 追加: `const_ref` edges を `include_constant_refs` 設定で出せるようにした（method body 内のみ、class header / mixin args / 内側 ConstantPathNode は除外）
 
 完了条件:
 
-- Rails 風 directory fixture で owner 推定が期待通り
-- collapse あり/なしの DOT snapshot がある
+- Rails 風 directory fixture で owner 推定が期待通り → integration test snapshot で `confidence: "zeitwerk"` を確認
+- collapse あり/なしの DOT snapshot がある → `dot/collapse_billing.snap`、example の `--collapse Billing` 切り替え
 
-### Phase 3: Rigor 型情報による補正
+設計メモ:
+
+- `ZeitwerkResolver` は `autoload_paths` と `concern_dirs` から長い root を優先採用。絶対 path を suffix match できるので tmpdir 経由の integration もそのまま動く
+- confidence は `syntax` を floor、Zeitwerk が agree したら `zeitwerk` に昇格、Rigor 型情報なら `rigor_type` に昇格（demote はしない）
+- Mermaid 側は `subgraph sg_Billing ["Billing"]` で named subgraph を出し、cluster 内ノードはラベル短縮（`Billing::Invoice` → `Invoice`）
+
+### Phase 3: Rigor 型情報による補正 ✅（2026-06-19 完了）
 
 対象:
 
-- `scope.type_of(node)` を使った confidence 向上
-- `include SOME_CONST` のような間接参照
-- RBS / Sorbet 経由で見える定数名の活用
-- resolved / unresolved の区別を CLI で filter 可能にする
+- `scope.type_of(node)` を使った confidence 向上 → done
+- `include SOME_CONST` のような間接参照 → `Rigor::Type::Singleton` を `class_name` から `to` に再構築、`confidence: "rigor_type"` に昇格
+- RBS / Sorbet 経由で見える定数名の活用 → Rigor の Environment が読んでいるので、間接的に Singleton 解決経由で乗る
+- resolved / unresolved の区別を CLI で filter 可能にする → `--confidence syntax,zeitwerk,rigor_type` フィルタを Dot / Mermaid / Cycles に追加
 
 完了条件:
 
-- syntax だけでは unresolved になる fixture が、Rigor 情報で resolved になる
-- 不明な type carrier で plugin が落ちず、edge を捨てるか unresolved に degrade する
+- syntax だけでは unresolved になる fixture が、Rigor 情報で resolved になる → Analyzer 単体テストで `include some_variable` を `unresolved` で記録、`scope.type_of` が Singleton を返せば `rigor_type` に昇格するパスを実装
+- 不明な type carrier で plugin が落ちず、edge を捨てるか unresolved に degrade する → `resolve_via_scope` が `rescue StandardError` で握りつぶし、`unresolved` edge に degrade。`raw` に元 source slice を残すので後段 review がしやすい
 
-### Phase 4: 分析機能
+設計メモ:
 
-対象:
+- 間接参照は MVP では「`unresolved` edge を捨てない」を優先。Rails の DSL や proc 越しの mixin も graph に痕跡が残るので、後で `--confidence syntax,zeitwerk,rigor_type` でフィルタするか、`raw` を見て手で潰すかは利用者の判断に任せる
+- Singleton 以外の Type carrier（Nominal、Dynamic、Union、Constant など）は今回 demote 扱い。多くの Rigor type が `Module` の identity を運ばないので、無理に拡張せず conservative にした
 
-- strongly connected components による循環検出
-- `kind` ごとの filter
-- owner namespace ごとの fan-in / fan-out
-- “この namespace から外へ出ている依存” の集計
-- package boundary file がある場合の package overlay
+### Phase 4: 分析機能（部分達成）
+
+対象 / 達成状況:
+
+- strongly connected components による循環検出 → ✅ Phase 1 で実装済（`CycleDetector` は iterative Tarjan）
+- `kind` ごとの filter → ✅ Phase 2 で実装済（`--kind inherits,include` etc.）
+- `confidence` ごとの filter → ✅ Phase 3 で実装済（`--confidence syntax,zeitwerk,rigor_type`）
+- owner namespace ごとの fan-in / fan-out → 未対応
+- "この namespace から外へ出ている依存" の集計 → 未対応
+- package boundary file がある場合の package overlay → 未対応
 
 完了条件:
 
-- `rigor-module-graph cycles` が循環を短い path で表示する
-- `--only include,inherits` などで noise を落とせる
+- `rigor-module-graph cycles` が循環を短い path で表示する → 完了（smallest-name rotation で出力）
+- `--only include,inherits` などで noise を落とせる → 完了（`--kind` に統一、`--only` は cycles のみエイリアス保持）
+
+残作業（必要なら追って Phase 4.5 で）:
+
+- `rigor-module-graph stats` サブコマンド（fan-in / fan-out / namespace 別の集計）
+- `--package` overlay（`packwerk.yml` 等の境界 file を読んで cluster をその境界に合わせる）
 
 ## テスト方針
 

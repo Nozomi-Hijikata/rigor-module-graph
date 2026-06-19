@@ -14,11 +14,11 @@ export BUNDLE_GEMFILE="$GEM_ROOT/Gemfile"
 echo "==> collect (rigor check + filter)" >&2
 bundle exec "$EXE" collect
 
-echo "==> render mermaid" >&2
-bundle exec "$EXE" mermaid .rigor/module_graph/edges.jsonl > graph.mmd
+echo "==> render mermaid (collapsed under Billing)" >&2
+bundle exec "$EXE" mermaid --collapse Billing .rigor/module_graph/edges.jsonl > graph.mmd
 
-echo "==> render dot" >&2
-bundle exec "$EXE" dot .rigor/module_graph/edges.jsonl > graph.dot
+echo "==> render dot (collapsed under Billing)" >&2
+bundle exec "$EXE" dot --collapse Billing .rigor/module_graph/edges.jsonl > graph.dot
 
 if command -v dot >/dev/null 2>&1; then
   echo "==> render svg via Graphviz" >&2

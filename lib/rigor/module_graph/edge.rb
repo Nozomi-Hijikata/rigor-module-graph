@@ -14,10 +14,12 @@ module Rigor
     #   so payload omits those to keep the message compact.
     # - `to_h` — what the JSONL writer dumps to disk. Full row,
     #   path/line/column included.
-    Edge = Data.define(:from, :to, :kind, :path, :line, :column, :confidence, :raw) do
-      KINDS = %w[inherits include prepend extend const_ref].freeze
+    EDGE_KINDS = %w[inherits include prepend extend const_ref].freeze
+    EDGE_CONFIDENCES = %w[syntax zeitwerk rigor_type unresolved].freeze
 
-      CONFIDENCES = %w[syntax zeitwerk rigor_type unresolved].freeze
+    Edge = Data.define(:from, :to, :kind, :path, :line, :column, :confidence, :raw) do
+      KINDS = EDGE_KINDS
+      CONFIDENCES = EDGE_CONFIDENCES
 
       def self.build(from:, to:, kind:, path: nil, line: nil, column: nil, confidence: "syntax", raw: nil)
         new(

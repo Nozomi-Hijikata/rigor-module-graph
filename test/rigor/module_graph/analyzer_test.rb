@@ -85,25 +85,103 @@ class AnalyzerTest < Minitest::Test
     assert_empty edges
   end
 
-  def test_indirect_mixin_argument_is_ignored
-    # `include some_variable` has no constant carrier; we drop it
-    # rather than emit an unresolved edge in MVP. Phase 3 may
-    # promote this through scope.type_of.
+  def test_indirect_mixin_argument_emits_unresolved_edge
+    # `include some_variable` has no constant carrier and (in
+    # unit tests) no Rigor scope to consult — we record the call
+    # as an `unresolved` edge so the graph still shows the
+    # reference, with `raw` preserving the source slice.
     edges = analyze(<<~RUBY)
       class Foo
         include some_variable
       end
     RUBY
-    assert_empty edges
+    assert_equal 1, edges.size
+    edge = edges.first
+    assert_equal "Foo", edge.from
+    assert_equal "some_variable", edge.to
+    assert_equal "include", edge.kind
+    assert_equal "unresolved", edge.confidence
+    assert_equal "some_variable", edge.raw
+  end
+
+  def test_const_ref_inside_def_body
+    edges = analyze_with_const_refs(<<~RUBY)
+      class Invoice
+        def total
+          Money.new(0)
+        end
+      end
+    RUBY
+    refs = edges.select { |e| e.kind == "const_ref" }
+    assert_equal 1, refs.size
+    assert_equal "Invoice", refs.first.from
+    assert_equal "Money", refs.first.to
+  end
+
+  def test_const_ref_path_emits_once_outer_only
+    # `Foo::Bar::Baz` is one ConstantPathNode wrapping nested
+    # ConstantPathNodes. Only the outer one should fire so we
+    # don't multi-count `Foo::Bar` and `Foo` as separate refs.
+    edges = analyze_with_const_refs(<<~RUBY)
+      class Invoice
+        def lookup
+          Foo::Bar::Baz
+        end
+      end
+    RUBY
+    refs = edges.select { |e| e.kind == "const_ref" }
+    assert_equal 1, refs.size
+    assert_equal "Foo::Bar::Baz", refs.first.to
+  end
+
+  def test_const_ref_skips_class_header_constants
+    # ApplicationRecord and Auditable in the header positions
+    # already produce inherits / include edges; const_ref must
+    # not double-count them.
+    edges = analyze_with_const_refs(<<~RUBY)
+      class Invoice < ApplicationRecord
+        include Auditable
+
+        def total
+          Money.new
+        end
+      end
+    RUBY
+    refs = edges.select { |e| e.kind == "const_ref" }
+    assert_equal ["Money"], refs.map(&:to)
+  end
+
+  def test_const_ref_skips_top_level_refs
+    edges = analyze_with_const_refs(<<~RUBY)
+      module Toplevel
+        CONST = SomeOther
+      end
+    RUBY
+    refs = edges.select { |e| e.kind == "const_ref" }
+    # Top-level (not inside def): skipped to avoid noise from DSL
+    # config blocks.
+    assert_empty refs
   end
 
   def analyze(source, path: "test.rb")
+    analyze_inner(source, path: path, include_constant_refs: false)
+  end
+
+  def analyze_with_const_refs(source, path: "test.rb")
+    analyze_inner(source, path: path, include_constant_refs: true)
+  end
+
+  def analyze_inner(source, path:, include_constant_refs:)
     results = []
     PrismAncestors.each_node(source) do |node, ancestors|
       analyzer = Analyzer.new(path: path, context: FakeNodeContext.new(ancestors))
       results.concat(analyzer.class_edges(node)) if node.is_a?(Prism::ClassNode)
       results.concat(analyzer.module_edges(node)) if node.is_a?(Prism::ModuleNode)
       results.concat(analyzer.call_edges(node)) if node.is_a?(Prism::CallNode)
+      if include_constant_refs
+        results.concat(analyzer.constant_read_edges(node)) if node.is_a?(Prism::ConstantReadNode)
+        results.concat(analyzer.constant_path_edges(node)) if node.is_a?(Prism::ConstantPathNode)
+      end
     end
     results
   end

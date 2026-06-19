@@ -27,11 +27,13 @@
     <div class="card">
       <pre class="mermaid">
 flowchart LR
+    subgraph sg_Billing ["Billing"]
+      n2["Invoice"]
+      n3["LineItem"]
+      n4["Payment"]
+    end
     n0["ApplicationRecord"]
     n1["Auditable"]
-    n2["Billing::Invoice"]
-    n3["Billing::LineItem"]
-    n4["Billing::Payment"]
     n5["Discountable"]
     n6["Searchable"]
     n7["Tracked"]
@@ -54,6 +56,7 @@ flowchart LR
   classDef prepend fill:#9333ea,color:#fff,stroke:#9333ea;
   classDef extend fill:#0f766e,color:#fff,stroke:#0f766e;
   classDef const_ref fill:#cbd5e1,color:#0f172a,stroke:#94a3b8;
+  classDef unresolved fill:#fef3c7,color:#0f172a,stroke:#d97706,stroke-dasharray: 4 4;
     class n0 inherits;
     class n1 include;
     class n5 include;

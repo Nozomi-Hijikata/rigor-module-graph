@@ -1,8 +1,15 @@
 flowchart LR
-  n0["A"]
-  n1["B"]
+  subgraph sg_Billing ["Billing"]
+    n2["Invoice"]
+    n3["Payment"]
+  end
+  n0["ApplicationRecord"]
+  n1["Auditable"]
 
-  n0 -->|include| n1
+  n2 ==>|inherits| n0
+  n2 -->|include| n1
+  n3 ==>|inherits| n0
+  n3 -->|include| n1
 
 classDef inherits fill:#0f172a,color:#fff,stroke:#0f172a;
 classDef include fill:#1d4ed8,color:#fff,stroke:#1d4ed8;
@@ -10,4 +17,7 @@ classDef prepend fill:#9333ea,color:#fff,stroke:#9333ea;
 classDef extend fill:#0f766e,color:#fff,stroke:#0f766e;
 classDef const_ref fill:#cbd5e1,color:#0f172a,stroke:#94a3b8;
 classDef unresolved fill:#fef3c7,color:#0f172a,stroke:#d97706,stroke-dasharray: 4 4;
+  class n0 inherits;
+  class n1 include;
+  class n0 inherits;
   class n1 include;

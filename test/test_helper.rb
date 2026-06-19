@@ -38,7 +38,7 @@ end
 
 # Minimal stand-in for Rigor::Plugin::NodeContext so unit tests for
 # Analyzer don't need to boot rigortype. Mirrors the real API the
-# Analyzer reads (`ancestors`, `enclosing_module`).
+# Analyzer reads (`ancestors`, `enclosing_module`, `enclosing_def`).
 class FakeNodeContext
   attr_reader :ancestors
 
@@ -50,5 +50,9 @@ class FakeNodeContext
     @ancestors.reverse.find do |n|
       n.is_a?(Prism::ClassNode) || n.is_a?(Prism::ModuleNode)
     end
+  end
+
+  def enclosing_def
+    @ancestors.reverse.find { |n| n.is_a?(Prism::DefNode) }
   end
 end
