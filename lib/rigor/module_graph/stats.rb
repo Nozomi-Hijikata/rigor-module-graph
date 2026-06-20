@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
-
 module Rigor
   module ModuleGraph
     # Computes per-namespace dependency metrics over an edge list.
@@ -34,65 +32,65 @@ module Rigor
       # @return [Array<NamespaceMetrics>] sorted by fan_out desc,
       #   then namespace asc; deterministic output.
       def compute(edges, depth: 1)
-        groups = group_nodes(edges, depth)
-        nodes_per_group = Hash.new { |h, k| h[k] = Set.new }
-        edges.each do |edge|
-          # Normalise the raw name when counting unique nodes so
-          # absolute (`::Foo::Bar`) and relative (`Foo::Bar`) forms
-          # fold together — they refer to the same constant.
-          nodes_per_group[groups.fetch(edge.from, TOP_LEVEL_BUCKET)] << normalise(edge.from)
-          nodes_per_group[groups.fetch(edge.to, TOP_LEVEL_BUCKET)] << normalise(edge.to)
-        end
-
-        metrics = Hash.new do |h, k|
-          h[k] = NamespaceMetrics.new(
-            namespace: k, nodes: 0, fan_out: 0, fan_in: 0, internal: 0
-          )
-        end
-        nodes_per_group.each do |group, nodes|
-          metrics[group] = metrics[group].with(nodes: nodes.size)
-        end
+        # Single pass over edges. For each edge we resolve both
+        # endpoints to a normalised name (cached), then to a
+        # bucket (cached), then update the bucket's mutable
+        # `[nodes_set, fan_out, fan_in, internal]` counter array.
+        # Allocating one immutable `NamespaceMetrics` per edge via
+        # `Data#with` is what made the old implementation slow.
+        normalised = {}
+        groups = {}
+        counters = Hash.new { |h, k| h[k] = [{}, 0, 0, 0] }
 
         edges.each do |edge|
-          from_group = groups.fetch(edge.from, TOP_LEVEL_BUCKET)
-          to_group = groups.fetch(edge.to, TOP_LEVEL_BUCKET)
+          from = (normalised[edge.from] ||= fast_normalise(edge.from))
+          to = (normalised[edge.to] ||= fast_normalise(edge.to))
+
+          from_group = (groups[from] ||= bucket_for_normalised(from, depth))
+          to_group = (groups[to] ||= bucket_for_normalised(to, depth))
+
+          from_counter = counters[from_group]
+          to_counter = counters[to_group]
+          from_counter[0][from] = true
+          to_counter[0][to] = true
+
           if from_group == to_group
-            metrics[from_group] = metrics[from_group].with(
-              internal: metrics[from_group].internal + 1
-            )
+            from_counter[3] += 1
           else
-            metrics[from_group] = metrics[from_group].with(
-              fan_out: metrics[from_group].fan_out + 1
-            )
-            metrics[to_group] = metrics[to_group].with(
-              fan_in: metrics[to_group].fan_in + 1
-            )
+            from_counter[1] += 1
+            to_counter[2] += 1
           end
         end
 
-        metrics.values.sort_by { |m| [-m.fan_out, m.namespace] }
-      end
-
-      # Maps every node name in +edges+ to its grouping bucket.
-      def group_nodes(edges, depth)
-        names = edges.flat_map { |edge| [edge.from, edge.to] }.uniq
-        names.to_h do |name|
-          [name, bucket_for(name, depth)]
+        metrics = counters.map do |namespace, counter|
+          NamespaceMetrics.new(
+            namespace: namespace,
+            nodes: counter[0].size,
+            fan_out: counter[1],
+            fan_in: counter[2],
+            internal: counter[3]
+          )
         end
-      end
-
-      def bucket_for(name, depth)
-        parts = normalise(name).split("::")
-        return TOP_LEVEL_BUCKET if parts.size <= depth
-
-        parts.first(depth).join("::")
+        metrics.sort_by { |m| [-m.fan_out, m.namespace] }
       end
 
       # Strip leading "::" so absolute and relative names share
       # the same bucket / node identity — they refer to the same
       # constant either way.
-      def normalise(name)
-        name.sub(/\A::/, "")
+      def fast_normalise(name)
+        name.start_with?("::") ? name[2..] : name
+      end
+
+      # Like +bucket_for+, but skips the +split+ allocation when
+      # the name has more segments than +depth+. Walks +index+
+      # once per +::+ separator and slices once at the boundary.
+      def bucket_for_normalised(name, depth)
+        cursor = -2
+        depth.times do
+          cursor = name.index("::", cursor + 2)
+          return TOP_LEVEL_BUCKET unless cursor
+        end
+        name[0...cursor]
       end
 
       # The five numbers for one namespace, exposed as a Data

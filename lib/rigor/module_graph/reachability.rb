@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
-
 module Rigor
   module ModuleGraph
     # Restricts an edge list to the subgraph reachable from a set
@@ -24,6 +22,9 @@ module Rigor
 
       VALID_DIRECTIONS = %i[out in both].freeze
       VALID_EDGE_SCOPES = %i[cluster walk].freeze
+
+      EMPTY = [].freeze
+      private_constant :EMPTY
 
       # @param edges [Array<Edge>]
       # @param roots [Array<String>] node names to start from
@@ -54,47 +55,95 @@ module Rigor
         case edge_scope
         when :cluster
           reachable = walk(edges, roots, depth, direction)
-          edges.select { |e| reachable.include?(e.from) && reachable.include?(e.to) }
+          edges.select { |e| reachable.key?(e.from) && reachable.key?(e.to) }
         when :walk
           indexes = walked_edge_indexes(edges, roots, depth, direction)
-          edges.each_with_index.select { |(_e, i)| indexes.include?(i) }.map(&:first)
+          # `walked` is a Hash<edge_index, true>; filter by
+          # membership keeping the original edge order.
+          out = []
+          edges.each_with_index do |e, i|
+            out << e if indexes.key?(i)
+          end
+          out
         end
       end
 
-      # Returns the indexes of edges actually traversed by the BFS.
-      # `direction=both` is the union of `:out` and `:in` walks —
-      # explicitly *not* a forward/backward-mixed BFS, which would
-      # admit zig-zag chains like +A <- X -> Y+ that aren't on any
-      # genuine path from the roots.
-      def walked_edge_indexes(edges, roots, depth, direction)
-        if direction == :both
-          return walked_edge_indexes(edges, roots, depth, :out) |
-                 walked_edge_indexes(edges, roots, depth, :in)
-        end
+      # BFS over the edge graph; returns a Hash<node_name, true>
+      # whose keys are the reachable nodes. We use a Hash instead
+      # of Set because Hash key lookup is faster on Ruby 4 and we
+      # don't need Set's union/intersection methods here.
+      def walk(edges, roots, depth, direction)
+        forward, backward = build_adjacency(edges, direction)
 
-        adjacency = build_indexed_adjacency(edges, direction)
-        visited = Set.new(roots)
-        frontier = Set.new(roots)
-        walked = Set.new
+        visited = {}
+        frontier = []
+        roots.each do |r|
+          visited[r] = true
+          frontier << r
+        end
         hops = 0
 
         until frontier.empty?
           break if depth && hops >= depth
 
-          next_frontier = Set.new
+          next_frontier = []
           frontier.each do |node|
-            adjacency[node].each do |neighbour, edge_index|
-              walked << edge_index
-              next if visited.include?(neighbour)
+            each_neighbour(node, forward, backward, direction) do |n|
+              next if visited.key?(n)
 
-              visited << neighbour
-              next_frontier << neighbour
+              visited[n] = true
+              next_frontier << n
             end
           end
           frontier = next_frontier
           hops += 1
         end
+        visited
+      end
+
+      # Returns a Hash<edge_index, true> for the edges actually
+      # traversed by the BFS. `direction=both` runs the out-walk
+      # and in-walk against separate adjacency tables so the
+      # zigzag chain (+A <- X -> Y+ whose +X -> Y+ isn't on any
+      # genuine path from the roots) stays excluded.
+      def walked_edge_indexes(edges, roots, depth, direction)
+        if direction == :both
+          forward, backward = build_indexed_adjacencies(edges)
+          walked = {}
+          run_indexed_walk(forward, roots, depth, walked)
+          run_indexed_walk(backward, roots, depth, walked)
+          return walked
+        end
+
+        adjacency = build_indexed_adjacency(edges, direction)
+        walked = {}
+        run_indexed_walk(adjacency, roots, depth, walked)
         walked
+      end
+
+      # @api private
+      def build_adjacency(edges, direction)
+        # Build only the adjacency tables we actually need. The
+        # caller asking for +:out+ never touches +backward+ etc.
+        forward = direction == :in ? nil : Hash.new { |h, k| h[k] = [] }
+        backward = direction == :out ? nil : Hash.new { |h, k| h[k] = [] }
+        edges.each do |edge|
+          forward[edge.from] << edge.to if forward
+          backward[edge.to] << edge.from if backward
+        end
+        [forward, backward]
+      end
+
+      def each_neighbour(node, forward, backward, direction, &block)
+        case direction
+        when :out
+          forward.fetch(node, EMPTY).each(&block)
+        when :in
+          backward.fetch(node, EMPTY).each(&block)
+        when :both
+          forward.fetch(node, EMPTY).each(&block)
+          backward.fetch(node, EMPTY).each(&block)
+        end
       end
 
       def build_indexed_adjacency(edges, direction)
@@ -108,41 +157,39 @@ module Rigor
         adjacency
       end
 
-      def walk(edges, roots, depth, direction)
-        forward = Hash.new { |h, k| h[k] = Set.new }
-        backward = Hash.new { |h, k| h[k] = Set.new }
-        edges.each do |edge|
-          forward[edge.from] << edge.to
-          backward[edge.to] << edge.from
+      def build_indexed_adjacencies(edges)
+        forward = Hash.new { |h, k| h[k] = [] }
+        backward = Hash.new { |h, k| h[k] = [] }
+        edges.each_with_index do |edge, i|
+          forward[edge.from] << [edge.to, i]
+          backward[edge.to] << [edge.from, i]
         end
+        [forward, backward]
+      end
 
-        reachable = Set.new(roots)
-        frontier = Set.new(roots)
+      def run_indexed_walk(adjacency, roots, depth, walked)
+        visited = {}
+        frontier = []
+        roots.each do |r|
+          visited[r] = true
+          frontier << r
+        end
         hops = 0
         until frontier.empty?
           break if depth && hops >= depth
 
-          next_frontier = Set.new
+          next_frontier = []
           frontier.each do |node|
-            neighbours = neighbours_for(node, forward, backward, direction) || []
-            neighbours.each do |n|
-              next if reachable.include?(n)
+            adjacency.fetch(node, EMPTY).each do |neighbour, edge_index|
+              walked[edge_index] = true
+              next if visited.key?(neighbour)
 
-              reachable << n
-              next_frontier << n
+              visited[neighbour] = true
+              next_frontier << neighbour
             end
           end
           frontier = next_frontier
           hops += 1
-        end
-        reachable
-      end
-
-      def neighbours_for(node, forward, backward, direction)
-        case direction
-        when :out then forward[node]
-        when :in then backward[node]
-        when :both then forward[node] + backward[node]
         end
       end
     end

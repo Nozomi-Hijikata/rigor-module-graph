@@ -55,7 +55,12 @@ module Rigor
     # +dedup_key+ ignores +path+ and +line+ so the same logical
     # edge declared in two files (or surfaced by two re-runs of
     # +rigor check+) collapses to one row.
-    class Edge < Data.define(:from, :to, :kind, :path, :line, :column, :confidence, :raw)
+    # The +dedup_key+ member at the end is internal: it's the
+    # cached +"\\x00"+-joined key string the renderers' dedup
+    # loops use for Hash lookups. Storing it on the value pays
+    # for itself once a few hundred edges flow through any
+    # rendering / IO path.
+    class Edge < Data.define(:from, :to, :kind, :path, :line, :column, :confidence, :raw, :dedup_key)
       # Same as Rigor::ModuleGraph::EDGE_KINDS; exposed on the
       # class so callers can write +Edge::KINDS+.
       KINDS = EDGE_KINDS
@@ -68,15 +73,20 @@ module Rigor
       # the canonical lists and frozen-stringifying +from+ / +to+.
       # Raises +ArgumentError+ on unknown values.
       def self.build(from:, to:, kind:, path: nil, line: nil, column: nil, confidence: "syntax", raw: nil)
+        from = from.to_s.freeze
+        to = to.to_s.freeze
+        kind = validate_kind!(kind)
+        confidence = validate_confidence!(confidence)
         new(
-          from: from.to_s.freeze,
-          to: to.to_s.freeze,
-          kind: validate_kind!(kind),
+          from: from,
+          to: to,
+          kind: kind,
           path: path,
           line: line,
           column: column,
-          confidence: validate_confidence!(confidence),
-          raw: raw
+          confidence: confidence,
+          raw: raw,
+          dedup_key: -"#{from}\x00#{to}\x00#{kind}\x00#{confidence}"
         )
       end
 
@@ -121,13 +131,8 @@ module Rigor
         JSON.generate(to_h, *args)
       end
 
-      # The key used to dedupe edges. +path+ and +line+ are
-      # intentionally excluded so two +include Foo+ in the same
-      # class across two files (or two re-runs of the same file)
-      # collapse to one logical edge.
-      def dedup_key
-        [from, to, kind, confidence]
-      end
+      # +dedup_key+ is a generated Data accessor; no override
+      # needed. See the class header for the rationale.
     end
 
     # JSONL reader / writer for Edge rows. Used by the plugin
