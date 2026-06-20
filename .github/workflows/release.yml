@@ -91,28 +91,22 @@ jobs:
 
       - name: Extract CHANGELOG section for this version
         id: changelog
-        # Slice between the `## [X.Y.Z]` heading and the next
-        # `## [` heading (= next version or `[Unreleased]`).
-        # `index() == 1` is a fixed-string prefix match — avoids
-        # `.` in the version being interpreted as a regex
-        # metacharacter. The body of the slice becomes the
-        # GitHub Release notes.
+        # `script/changelog_extract.rb` slices the section between
+        # `## [X.Y.Z]` and the next `## [` heading, then reflows
+        # soft-wrapped paragraphs and list items into single
+        # logical lines. The reflow is necessary because GitHub
+        # Releases render with the GFM line-break extension on,
+        # so CHANGELOG's column-70 hard wrap would otherwise show
+        # mid-sentence `<br>`s in the rendered release body.
+        #
+        # The reflow rules and edge cases are pinned in
+        # `test/script/changelog_extract_test.rb`.
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           set -euo pipefail
           notes_path="/tmp/release-notes.md"
-          awk -v ver="${VERSION}" '
-            index($0, "## [" ver "]") == 1 { flag=1; next }
-            flag && index($0, "## [") == 1 { exit }
-            flag { print }
-          ' CHANGELOG.md > "${notes_path}"
-
-          if ! grep -q '[^[:space:]]' "${notes_path}"; then
-            echo "::error::Extracted release notes are empty (whitespace only)."
-            echo "Check that CHANGELOG.md's [${VERSION}] section has content."
-            exit 1
-          fi
+          ruby script/changelog_extract.rb --version "${VERSION}" CHANGELOG.md > "${notes_path}"
           echo "notes_path=${notes_path}" >> "$GITHUB_OUTPUT"
           echo "--- release notes preview ---"
           cat "${notes_path}"
