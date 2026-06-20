@@ -370,6 +370,12 @@ back to `open` on macOS and `xdg-open` elsewhere.
 Online docs follow whatever rubydoc.info publishes from the latest
 release: <https://rubydoc.info/gems/rigor-module-graph>.
 
+The version history lives in [CHANGELOG.md](CHANGELOG.md), formatted
+per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) with
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). The
+release workflow gates on a `## [VERSION]` entry being present
+before pushing to RubyGems.
+
 ## Compatibility
 
 - Ruby `>= 4.0.0, < 4.1`

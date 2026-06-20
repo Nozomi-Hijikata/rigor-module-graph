@@ -43,6 +43,20 @@ jobs:
       - name: Bundle install
         run: bundle install --jobs 4 --retry 3
 
+      - name: Verify CHANGELOG has a section for this version
+        # Reads VERSION from lib/.../version.rb and grep CHANGELOG
+        # for a matching `## [X.Y.Z]` heading. Catches the common
+        # "forgot to update the changelog before publishing" case
+        # before the gem hits rubygems.org.
+        run: |
+          version="$(ruby -r ./lib/rigor/module_graph/version -e 'print Rigor::ModuleGraph::VERSION')"
+          if ! grep -qE "^## \[${version}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for version ${version}."
+            echo "Add a '## [${version}] — YYYY-MM-DD' heading before releasing."
+            exit 1
+          fi
+          echo "CHANGELOG.md has a section for ${version}."
+
       - name: Run tests
         run: bundle exec rake test
 

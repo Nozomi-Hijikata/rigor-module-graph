@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.name = "rigor-module-graph"
   spec.version = Rigor::ModuleGraph::VERSION
   spec.authors = ["Nozomi Hijikata"]
-  spec.email = ["nozomi.hijikata@techouse.jp"]
+  spec.email = ["b8yukifsukeo999n@gmail.com"]
 
   spec.summary = "Class/module/constant dependency graph for Ruby projects, built on Rigor."
   spec.description = <<~DESC
@@ -18,12 +18,14 @@ Gem::Specification.new do |spec|
   spec.license = "MIT"
   spec.required_ruby_version = ">= 4.0.0", "< 4.1"
 
-  spec.files = Dir["lib/**/*.rb", "lib/**/*.erb", "exe/*", "README.md", "LICENSE.txt"]
+  spec.files = Dir["lib/**/*.rb", "lib/**/*.erb", "exe/*", "README.md", "CHANGELOG.md", "LICENSE.txt"]
   spec.bindir = "exe"
   spec.executables = ["rigor-module-graph"]
   spec.require_paths = ["lib"]
   spec.metadata = {
     "documentation_uri" => "https://rubydoc.info/gems/rigor-module-graph",
+    "changelog_uri" => "https://github.com/Nozomi-Hijikata/rigor-graphviz/blob/main/CHANGELOG.md",
+    "source_code_uri" => "https://github.com/Nozomi-Hijikata/rigor-graphviz",
     "rubygems_mfa_required" => "true"
   }
   spec.rdoc_options = ["--main", "README.md", "--markup", "rdoc"]
