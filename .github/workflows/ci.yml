@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel duplicate runs when a PR is force-pushed; only the
+# latest commit's checks are interesting.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Ruby
+        # `bundler-cache: true` runs `bundle install` and writes
+        # the lockfile-keyed restore cache so subsequent runs skip
+        # the install entirely on a cache hit.
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0.0"
+          bundler-cache: true
+
+      - name: Run minitest
+        run: bundle exec rake test
+
+      - name: Run minitest with C2 coverage
+        # SimpleCov runs when COVERAGE=1; report writes to
+        # ./coverage. We upload it as a build artefact so failures
+        # are inspectable from the run page.
+        run: bundle exec rake coverage
+        env:
+          COVERAGE: "1"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 14
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0.0"
+          bundler-cache: true
+
+      - name: RuboCop
+        run: bundle exec rubocop --parallel
+
+      - name: Rigor check (lib only)
+        # Same glob the pre-commit hook uses — keeps the analyzer
+        # away from test_helper's SimpleCov DSL.
+        run: bundle exec rigor check lib
+
+  workflow-lint:
+    # Audits the GitHub Actions workflows themselves. zizmor flags
+    # the common Action security pitfalls (mutable refs, missing
+    # persist-credentials, overbroad permissions, ...).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@v0

@@ -305,23 +305,45 @@ bundle exec rake coverage         # C2 (branch) coverage report under ./coverage
 
 ### Git hooks
 
-`lefthook.yml` wires four checks. The split is "fast on every
+`lefthook.yml` wires five checks. The split is "fast on every
 commit, full suite on push":
 
-| hook       | command       | scope                          |
-|------------|---------------|--------------------------------|
-| pre-commit | rubocop       | staged Ruby files              |
-| pre-commit | betterleaks   | staged content, secret scan    |
-| pre-commit | rigor check   | staged Ruby files              |
-| pre-push   | minitest      | full `rake test`               |
+| hook       | command       | scope                                    |
+|------------|---------------|------------------------------------------|
+| pre-commit | rubocop       | staged Ruby files                        |
+| pre-commit | betterleaks   | staged content, secret scan              |
+| pre-commit | rigor check   | staged Ruby files (`lib/**/*.rb`)        |
+| pre-commit | zizmor        | staged GitHub Actions workflow files     |
+| pre-push   | minitest      | full `rake test`                         |
 
-The three pre-commit checks run in parallel; on this repo they
-finish in ~1 second together. `betterleaks` is a binary (`brew
-install betterleaks` on macOS) — the others come in through
-Bundler. `rubocop` re-stages autocorrected files.
+The pre-commit checks run in parallel; on this repo they finish
+in ~1 second together. `betterleaks` (`brew install betterleaks`
+on macOS) and `zizmor` (`brew install zizmor` or `pipx install
+zizmor`) are external binaries — the others come in through
+Bundler. `rubocop` re-stages autocorrected files. `zizmor` is
+gated on workflow files only so day-to-day commits don't trigger
+it.
 
 Skip a hook ad-hoc with `LEFTHOOK_EXCLUDE=<command>` (e.g.
 `LEFTHOOK_EXCLUDE=rigor git commit ...`).
+
+### CI / Release
+
+Two GitHub Actions workflows under `.github/workflows/`:
+
+- **`ci.yml`** — runs on every push and PR to `main`. Three
+  jobs: `test` (minitest, then minitest with C2 coverage,
+  uploads `coverage/`), `lint` (RuboCop + `rigor check lib`),
+  and `workflow-lint` (zizmor over the workflow files
+  themselves). All jobs cache the bundler install keyed on
+  `Gemfile.lock`.
+- **`release.yml`** — manual trigger (`workflow_dispatch`).
+  Builds the gem, runs tests, and pushes to RubyGems via
+  [trusted publishing](https://guides.rubygems.org/trusted-publishing/)
+  — no long-lived API token. Toggle the `dry_run` input to
+  validate the pipeline without uploading. Configure the trusted
+  publisher under the gem's rubygems.org settings before the
+  first run.
 
 The test suite covers:
 

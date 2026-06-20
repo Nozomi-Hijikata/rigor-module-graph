@@ -33,6 +33,16 @@ pre-commit:
       # analyzer can't trace statically.
       run: bundle exec rigor check {staged_files}
 
+    zizmor:
+      tags: security
+      # GitHub Actions security / lint. Only runs when a workflow
+      # file is staged, so the day-to-day commit cost is zero.
+      # Install once with `brew install zizmor` (macOS) or
+      # `pipx install zizmor`; CI also runs it via the
+      # `workflow-lint` job in .github/workflows/ci.yml.
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: zizmor {staged_files}
+
 pre-push:
   commands:
     minitest:

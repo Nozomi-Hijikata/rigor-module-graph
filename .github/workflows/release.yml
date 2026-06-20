@@ -1,0 +1,68 @@
+name: Release
+
+# Manual trigger only — we don't auto-publish on tag pushes
+# because the workflow needs a human to confirm the version bump
+# and changelog before bytes hit rubygems.org.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Skip the `gem push` step (build + test only)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  # OIDC trusted publishing to RubyGems. No long-lived API key —
+  # rubygems.org accepts a short-lived token tied to this repo +
+  # workflow. Configure the trusted publisher under the gem's
+  # rubygems.org settings before the first run; see
+  # https://guides.rubygems.org/trusted-publishing/
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: rubygems     # use a protected environment if branch protection is set
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Ruby
+        # No bundler-cache here: this workflow publishes a build
+        # artefact, and a poisoned dependency in a restored cache
+        # could end up in the gem we push. The install runs
+        # once per release, which is cheap.
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0.0"
+
+      - name: Bundle install
+        run: bundle install --jobs 4 --retry 3
+
+      - name: Run tests
+        run: bundle exec rake test
+
+      - name: Build gem
+        run: |
+          mkdir -p pkg
+          gem build rigor-module-graph.gemspec --output "pkg/rigor-module-graph.gem"
+
+      - name: Verify gem contents
+        run: gem unpack pkg/rigor-module-graph.gem --target /tmp/gem-inspect && ls /tmp/gem-inspect/
+
+      - name: Upload built gem as artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gem
+          path: pkg/*.gem
+          retention-days: 7
+
+      - name: Push to RubyGems (trusted publishing)
+        if: ${{ !inputs.dry_run }}
+        uses: rubygems/release-gem@v1
+        with:
+          working-directory: pkg
