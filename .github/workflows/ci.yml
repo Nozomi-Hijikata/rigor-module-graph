@@ -30,7 +30,7 @@ jobs:
         # the install entirely on a cache hit.
         uses: ruby/setup-ruby@89f90524b88a01fe6e0b732220432cc6142926af # v1.313.0
         with:
-          ruby-version: "4.0.0"
+          ruby-version-file: ".ruby-version"
           bundler-cache: true
 
       - name: Run minitest
@@ -64,7 +64,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@89f90524b88a01fe6e0b732220432cc6142926af # v1.313.0
         with:
-          ruby-version: "4.0.0"
+          ruby-version-file: ".ruby-version"
           bundler-cache: true
 
       - name: RuboCop
