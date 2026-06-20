@@ -44,6 +44,20 @@ Categories:
 - `.github/dependabot.yml` — weekly Bundler + GitHub Actions
   bumps; `vendor/**` is explicitly excluded so vendored
   third-party JS never auto-updates.
+- `bundle exec rake vendor:audit` — 4-source cross-check
+  (local sha256 / npm tarball `dist.integrity` /
+  tarball-internal copy / GitHub raw / every CDN). Reads
+  `lib/rigor/module_graph/templates/vendor/MANIFEST.yml` for
+  the provenance metadata. Use on bump PRs; not part of the
+  regular CI pipeline (network-using).
+- CI now runs `rake vendor:verify` independently of
+  pre-commit so an unaudited bump can't land on `main` even
+  if local hooks were skipped.
+- CI now regenerates `examples/billing/` via `script/
+  check_billing_drift.rb` and fails on drift between the
+  freshly-built artefacts and the committed copies.
+  Normalises the graphviz version banner so the runner's
+  apt-shipped version doesn't trigger a false positive.
 
 ### Changed
 
