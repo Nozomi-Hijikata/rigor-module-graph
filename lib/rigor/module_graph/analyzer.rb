@@ -162,13 +162,32 @@ module Rigor
           next unless (sym = symbol_name(arg))
 
           target = class_name_from_options(node) ||
-                   Inflector.class_name_for(sym)
+                   infer_associated_class(owner, sym)
           build_edge(
             from: owner, to: target, kind: kind, node: node,
             confidence: :syntax,
             raw: sym
           )
         end
+      end
+
+      # Rails resolves `has_many :invoices` inside `Billing::Customer`
+      # to `Billing::Invoice`, not the top-level `Invoice`, because
+      # `compute_type` walks the owner's namespace upwards before
+      # falling back to the top level. We don't reproduce that
+      # walk (we'd need every constant in scope), but defaulting to
+      # the owner's namespace is the right approximation:
+      # - `class_name: "Foo"` always wins (the explicit override)
+      # - top-level owners (no enclosing namespace) keep the bare
+      #   name, matching the previous behaviour
+      # - namespaced owners get the sibling resolution Rails does
+      #   by default
+      def infer_associated_class(owner, sym)
+        bare = Inflector.class_name_for(sym)
+        namespace = owner.rpartition("::").first
+        return bare if namespace.empty?
+
+        "#{namespace}::#{bare}"
       end
 
       # Emits `include` / `prepend` / `extend` edges for a call

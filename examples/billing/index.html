@@ -35,39 +35,38 @@
       <pre class="mermaid">
 flowchart LR
     subgraph sg_Billing ["Billing"]
+      n2["Address"]
       n3["Customer"]
       n4["Invoice"]
       n5["LineItem"]
       n6["Payment"]
+      n7["Tag"]
+      n8["Tenant"]
     end
-    n0["Address"]
-    n1["ApplicationRecord"]
-    n2["Auditable"]
-    n7["Discountable"]
-    n8["Invoice"]
-    n9["Searchable"]
-    n10["Tag"]
-    n11["Tenant"]
-    n12["Tracked"]
+    n0["ApplicationRecord"]
+    n1["Auditable"]
+    n9["Discountable"]
+    n10["Searchable"]
+    n11["Tracked"]
   
-    n3 ==>|inherits| n1
-    n3 -->|include| n2
-    n3 -->|has_many| n8
-    n3 -->|has_one| n0
-    n3 -->|belongs_to| n11
-    n3 -->|has_and_belongs_to_many| n10
-    n4 ==>|inherits| n1
-    n4 -->|include| n2
-    n4 -->|include| n7
-    n4 -->|prepend| n12
-    n4 -.->|extend| n9
-    n5 ==>|inherits| n1
-    n5 -->|include| n2
-    n5 -.->|extend| n9
-    n6 ==>|inherits| n1
-    n6 -->|include| n2
-    n6 -->|prepend| n12
-    n7 -->|include| n2
+    n3 ==>|inherits| n0
+    n3 -->|include| n1
+    n3 -->|has_many| n4
+    n3 -->|has_one| n2
+    n3 -->|belongs_to| n8
+    n3 -->|has_and_belongs_to_many| n7
+    n4 ==>|inherits| n0
+    n4 -->|include| n1
+    n4 -->|include| n9
+    n4 -->|prepend| n11
+    n4 -.->|extend| n10
+    n5 ==>|inherits| n0
+    n5 -->|include| n1
+    n5 -.->|extend| n10
+    n6 ==>|inherits| n0
+    n6 -->|include| n1
+    n6 -->|prepend| n11
+    n9 -->|include| n1
   
   classDef inherits fill:#0f172a,color:#fff,stroke:#0f172a;
   classDef include fill:#1d4ed8,color:#fff,stroke:#1d4ed8;
@@ -75,15 +74,15 @@ flowchart LR
   classDef extend fill:#0f766e,color:#fff,stroke:#0f766e;
   classDef const_ref fill:#cbd5e1,color:#0f172a,stroke:#94a3b8;
   classDef unresolved fill:#fef3c7,color:#0f172a,stroke:#d97706,stroke-dasharray: 4 4;
-    class n1 inherits;
-    class n2 include;
-    class n8 has_many;
-    class n0 has_one;
-    class n11 belongs_to;
-    class n10 has_and_belongs_to_many;
-    class n7 include;
-    class n12 prepend;
-    class n9 extend;
+    class n0 inherits;
+    class n1 include;
+    class n4 has_many;
+    class n2 has_one;
+    class n8 belongs_to;
+    class n7 has_and_belongs_to_many;
+    class n9 include;
+    class n11 prepend;
+    class n10 extend;
       </pre>
     </div>
     <div class="legend">

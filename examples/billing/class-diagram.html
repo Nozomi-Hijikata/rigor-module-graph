@@ -34,10 +34,9 @@
         <div class="card">
       <pre class="mermaid">
 classDiagram
-    class Address
     class ApplicationRecord
     class Auditable["Auditable «module»"]
-    class Billing["Billing «module»"]
+    class Billing__Address["Billing::Address"]
     class Billing__Customer["Billing::Customer"]
     class Billing__Customer {
       +preferred_language : accessor
@@ -47,19 +46,18 @@ classDiagram
     class Billing__Invoice["Billing::Invoice"]
     class Billing__LineItem["Billing::LineItem"]
     class Billing__Payment["Billing::Payment"]
+    class Billing__Tag["Billing::Tag"]
+    class Billing__Tenant["Billing::Tenant"]
     class Discountable["Discountable «module»"]
-    class Invoice
     class Searchable["Searchable «module»"]
-    class Tag
-    class Tenant
     class Tracked["Tracked «module»"]
   
     ApplicationRecord <|-- Billing__Customer : inherits
     Auditable <|.. Billing__Customer : include
-    Invoice "1" -- "*" Billing__Customer : has_many
-    Address "1" -- "1" Billing__Customer : has_one
-    Tenant "*" -- "1" Billing__Customer : belongs_to
-    Tag "*" -- "*" Billing__Customer : has_and_belongs_to_many
+    Billing__Invoice "1" -- "*" Billing__Customer : has_many
+    Billing__Address "1" -- "1" Billing__Customer : has_one
+    Billing__Tenant "*" -- "1" Billing__Customer : belongs_to
+    Billing__Tag "*" -- "*" Billing__Customer : has_and_belongs_to_many
     ApplicationRecord <|-- Billing__Invoice : inherits
     Auditable <|.. Billing__Invoice : include
     Discountable <|.. Billing__Invoice : include

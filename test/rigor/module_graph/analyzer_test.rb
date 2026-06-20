@@ -186,6 +186,38 @@ class AnalyzerTest < Minitest::Test
     assert_equal "User", assoc.to
   end
 
+  def test_association_in_namespaced_class_prepends_lexical_namespace
+    # Rails resolves `has_many :invoices` inside `Billing::Customer`
+    # to `Billing::Invoice` via the constant lookup walk. Static
+    # analysis defaults to the same answer.
+    edges = analyze(<<~RUBY)
+      module Billing
+        class Customer < ApplicationRecord
+          has_many :invoices
+          has_one :address
+          belongs_to :tenant
+        end
+      end
+    RUBY
+    assocs = edges.reject { |e| e.kind == "inherits" }
+    targets = assocs.map(&:to).sort
+    assert_equal %w[Billing::Address Billing::Invoice Billing::Tenant], targets
+  end
+
+  def test_association_in_deeply_namespaced_class_prepends_full_namespace
+    edges = analyze(<<~RUBY)
+      module Foo
+        module Bar
+          class Customer < ApplicationRecord
+            has_many :invoices
+          end
+        end
+      end
+    RUBY
+    assoc = edges.find { |e| e.kind == "has_many" }
+    assert_equal "Foo::Bar::Invoice", assoc.to
+  end
+
   def test_association_class_name_override_wins
     edges = analyze(<<~RUBY)
       class Invoice < ApplicationRecord
