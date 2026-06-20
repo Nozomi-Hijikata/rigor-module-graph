@@ -360,7 +360,10 @@ module Rigor
             from: nil,
             depth: nil,
             direction: :both,
-            package: nil
+            package: nil,
+            include_methods: true,
+            include_attributes: true,
+            visibilities: %w[public protected private]
           }
         end
 
@@ -414,8 +417,30 @@ module Rigor
           when "svg"
             [graphviz_svg(Dot.render(edges, collapse: collapse, groups: groups)), true]
           when "class-diagram"
-            [Uml::ClassDiagram.render(edges, nodes), false]
+            [
+              Uml::ClassDiagram.render(
+                edges, restrict_nodes_to_edges(nodes, edges),
+                include_methods: @options[:include_methods],
+                include_attributes: @options[:include_attributes],
+                visibilities: @options[:visibilities]
+              ),
+              false
+            ]
           end
+        end
+
+        # When the user narrows the edge set with `--from` /
+        # `--kind` / `--confidence`, the class diagram should only
+        # show classes that participate in those edges — otherwise
+        # every constant declared in the project still shows up as
+        # a body-less class. The filter is a no-op when the edge
+        # set already covers every node (no filters applied).
+        def restrict_nodes_to_edges(nodes, edges)
+          return nodes if edges.empty?
+
+          visible = Set.new
+          edges.each { |edge| visible << edge.from << edge.to }
+          nodes.select { |node| visible.include?(node.owner) || visible.include?(node.name) }
         end
 
         # Shell out to Graphviz `dot -Tsvg`. Surfacing the binary
@@ -490,6 +515,22 @@ module Rigor
             opts.on("--no-collapse",
                     "Disable namespace collapse entirely") do
               @options[:collapse] = []
+            end
+            opts.on("--no-methods",
+                    "[class-diagram] Don't render methods inside class bodies") do
+              @options[:include_methods] = false
+            end
+            opts.on("--no-attributes",
+                    "[class-diagram] Don't render attributes inside class bodies") do
+              @options[:include_attributes] = false
+            end
+            opts.on("--public-only",
+                    "[class-diagram] Only show public members") do
+              @options[:visibilities] = %w[public]
+            end
+            opts.on("--no-private",
+                    "[class-diagram] Hide private members") do
+              @options[:visibilities] = %w[public protected]
             end
             opts.on("--package",
                     "Cluster by Packwerk packages discovered in cwd") do
