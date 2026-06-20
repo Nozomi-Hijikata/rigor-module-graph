@@ -11,27 +11,24 @@ pre-commit:
   commands:
     rubocop:
       tags: lint
-      glob: "*.rb"
-      run: bundle exec rubocop --force-exclusion {staged_files}
-      stage_fixed: true # re-stage the file when rubocop autocorrects it
+      # Scan the whole project, not just staged files. CI runs the
+      # same `bundle exec rubocop --parallel` so the local hook
+      # catches the same violations CI would (e.g. an unstaged
+      # Gemfile / Rakefile drift).
+      run: bundle exec rubocop --parallel
+      stage_fixed: true
     betterleaks:
       tags: security
-      # `betterleaks git --pre-commit --staged` is the canonical
-      # pre-commit invocation per the project's own
-      # .pre-commit-hooks.yaml. --redact hides the secret value
-      # in the report so a screen-shared review of the hook output
-      # doesn't leak the very thing the scan caught.
+      # `--staged` is the right scope for a secret scanner — only
+      # content that's about to be committed can leak secrets into
+      # the gem. A full-tree scan doesn't add safety, just latency.
       run: betterleaks git --pre-commit --redact --staged --verbose
     rigor:
       tags: lint
-      glob: "lib/**/*.rb"
-      # Rigor reads `.rigor.yml` from the project root and analyses
-      # the paths we hand it. Staged files only keeps the check
-      # fast (full-project scans run in CI / locally on demand).
-      # Tests / examples / build scripts intentionally fall through
-      # — they monkey-patch SimpleCov / lefthook DSLs that the
-      # analyzer can't trace statically.
-      run: bundle exec rigor check {staged_files}
+      # Full `lib/` scan. `.rigor.yml` already excludes test/ and
+      # examples/ where SimpleCov / lefthook DSLs would trip the
+      # analyzer's static lookup.
+      run: bundle exec rigor check lib
 
     zizmor:
       tags: security

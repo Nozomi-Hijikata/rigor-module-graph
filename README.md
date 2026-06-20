@@ -299,7 +299,7 @@ Skip a hook ad-hoc with `LEFTHOOK_EXCLUDE=<command>` (e.g.
 
 ### CI / Release
 
-Two GitHub Actions workflows under `.github/workflows/`:
+Three GitHub Actions workflows under `.github/workflows/`:
 
 - **`ci.yml`** — runs on every push and PR to `main`. Three
   jobs: `test` (minitest, then minitest with C2 coverage,
@@ -307,6 +307,12 @@ Two GitHub Actions workflows under `.github/workflows/`:
   and `workflow-lint` (zizmor over the workflow files
   themselves). All jobs cache the bundler install keyed on
   `Gemfile.lock`.
+- **`docs.yml`** — runs on push to `main`. Generates RDoc via
+  `bundle exec rake rdoc` and deploys `doc/` to GitHub Pages.
+  The live site is at
+  <https://nozomemein.github.io/rigor-module-graph/>. Enable
+  GitHub Pages with the "GitHub Actions" source before the
+  first run.
 - **`release.yml`** — manual trigger (`workflow_dispatch`).
   Builds the gem, runs tests, and pushes to RubyGems via
   [trusted publishing](https://guides.rubygems.org/trusted-publishing/)
@@ -337,8 +343,10 @@ bundle exec rake rdoc:server     # serves on http://localhost:8808 via `ri --ser
 `rake rdoc:preview` honours `$BROWSER` if set; otherwise it falls
 back to `open` on macOS and `xdg-open` elsewhere.
 
-Online docs follow whatever rubydoc.info publishes from the latest
-release: <https://rubydoc.info/gems/rigor-module-graph>.
+Online docs are published from `main` to GitHub Pages by the
+`docs.yml` workflow: <https://nozomemein.github.io/rigor-module-graph/>.
+Rubydoc.info mirrors the latest released gem at
+<https://rubydoc.info/gems/rigor-module-graph>.
 
 The version history lives in [CHANGELOG.md](CHANGELOG.md), formatted
 per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) with
