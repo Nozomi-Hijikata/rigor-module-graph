@@ -17,6 +17,13 @@ Categories:
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-06-20
+
+First release that exercises the full automated pipeline end
+to end — Trusted Publishing + GitHub Release + asset upload
+all drive off a single `gh workflow run release.yml` after the
+tag is pushed.
+
 ### Added
 
 - `view` and `collect` now emit step-level progress on stderr:
@@ -166,6 +173,7 @@ spike through Phase 5 (UML class diagram).
   baseline and YJIT, and trailed baseline on Stats and
   CycleDetector — recommendation stays YJIT.
 
-[Unreleased]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nozomemein/rigor-module-graph/releases/tag/v0.1.0
