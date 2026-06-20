@@ -36,7 +36,8 @@ end
 # output tree under the same relative path so the markdown links
 # keep working both on GitHub and on GitHub Pages.
 RDOC_ASSET_PATHS = [
-  "examples/billing/graph.svg"
+  "examples/billing/graph.svg",
+  "examples/billing/preview.png"
 ].freeze
 
 Rake::Task[:rdoc].enhance do
@@ -67,6 +68,25 @@ desc "Run tests with C2 (branch) coverage. Report writes to ./coverage."
 task :coverage do
   ENV["COVERAGE"] = "1"
   Rake::Task[:test].invoke
+end
+
+VENDOR_DIR = File.expand_path("lib/rigor/module_graph/templates/vendor", __dir__)
+VENDOR_MANIFEST_PATH = File.join(VENDOR_DIR, "MANIFEST.yml")
+VENDOR_CHECKSUMS_PATH = File.join(VENDOR_DIR, "CHECKSUMS")
+
+namespace :vendor do
+  desc "Cross-check each vendored asset against npm + GitHub + every CDN " \
+       "in MANIFEST.yml. Use on bump PRs; needs network."
+  task :audit do
+    require_relative "script/vendor_audit"
+    VendorAudit.run(manifest_path: VENDOR_MANIFEST_PATH, vendor_dir: VENDOR_DIR)
+  end
+
+  desc "Verify sha256 of each vendored asset against vendor/CHECKSUMS"
+  task :verify do
+    require_relative "script/vendor_verify"
+    VendorVerify.run(checksums_path: VENDOR_CHECKSUMS_PATH, vendor_dir: VENDOR_DIR)
+  end
 end
 
 task default: :test

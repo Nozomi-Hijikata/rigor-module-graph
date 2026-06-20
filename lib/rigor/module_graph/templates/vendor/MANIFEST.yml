@@ -1,0 +1,40 @@
+# Structured provenance for every file in this directory.
+#
+# `CHECKSUMS` carries the sha256s `rake vendor:verify` reads on
+# every commit and every CI run — that's the locally-enforced
+# integrity gate.
+#
+# This file carries the per-file provenance that `rake vendor:audit`
+# reads on a bump PR: the upstream URLs and the npm `dist.integrity`
+# value the package was published with. `audit` is a network-using
+# task that downloads each upstream copy fresh and asserts they all
+# agree with the recorded checksums; we run it explicitly during a
+# bump, not on every CI run, so the regular pipeline doesn't depend
+# on jsDelivr / npm / GitHub being reachable.
+---
+files:
+  - filename: cytoscape.min.js
+    sha256: 9c2a3bf2592e0b14a1f7bec07c03a54f16dedf32af9cd0af155c716aa6c87bc3
+    upstream:
+      github: https://github.com/cytoscape/cytoscape.js
+      release_tag: v3.34.0
+      release_date: "2026-06-02"
+      license: MIT
+    npm:
+      package: cytoscape
+      version: "3.34.0"
+      # `dist.integrity` value from
+      # https://registry.npmjs.org/cytoscape/3.34.0 — the sha512
+      # the npm registry signed the tarball with.
+      integrity: "sha512-62rNSrioXw93uliKFBwjukeQyeWwH2PqDrTac31r2P6464u3AUvTk0xS4LVvT251g7IgkFunrI48ZEZGjywSOg=="
+      tarball_url: "https://registry.npmjs.org/cytoscape/-/cytoscape-3.34.0.tgz"
+      # Path inside the unpacked tarball that should byte-match
+      # `vendor/<filename>`.
+      tarball_path: "package/dist/cytoscape.min.js"
+    github_raw_url: "https://raw.githubusercontent.com/cytoscape/cytoscape.js/v3.34.0/dist/cytoscape.min.js"
+    cdns:
+      - https://cdn.jsdelivr.net/npm/cytoscape@3.34.0/dist/cytoscape.min.js
+      - https://unpkg.com/cytoscape@3.34.0/dist/cytoscape.min.js
+    # Date the four sources (npm tarball, GitHub raw, jsdelivr,
+    # unpkg) were last fetched and confirmed byte-identical.
+    last_audited: "2026-06-20"

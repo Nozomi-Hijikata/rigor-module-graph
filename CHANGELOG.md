@@ -17,8 +17,57 @@ Categories:
 
 ## [Unreleased]
 
+### Added
+
+- **Interactive `view --output html` viewer.** Replaces the
+  static Mermaid embed with a [Cytoscape.js](https://js.cytoscape.org/)-based
+  page that renders 5k+ nodes, filters live by `kind` /
+  `confidence`, supports a name-substring search, and copies
+  `path:line` to the clipboard on node click. The Cytoscape
+  library is vendored into the gem at a sha256-pinned version
+  (`lib/rigor/module_graph/templates/vendor/cytoscape.min.js`);
+  no CDN, no npm, no Dependabot auto-bump.
+  See [`docs/plan.md`](docs/plan.md) "2D interactive viewer"
+  for the supply-chain rationale.
+- `--path-mode {relative,absolute,none}` flag on `view` —
+  controls how node paths reach the viewer's click-through
+  metadata. `none` strips paths from the HTML artefact, which
+  is the right setting when sharing the file outside the
+  project (PR comment, gist, …).
+- `--open-with vscode` flag on `view` — flips the node-click
+  action from clipboard copy to `vscode://file/<path>:<line>`
+  so the editor jumps straight to the source location.
+- `bundle exec rake vendor:verify` task — recomputes sha256
+  for every file in `vendor/CHECKSUMS` and fails on mismatch.
+  Wired into pre-commit on any staged file under
+  `lib/**/templates/vendor/**`.
+- `.github/dependabot.yml` — weekly Bundler + GitHub Actions
+  bumps; `vendor/**` is explicitly excluded so vendored
+  third-party JS never auto-updates.
+- `bundle exec rake vendor:audit` — 4-source cross-check
+  (local sha256 / npm tarball `dist.integrity` /
+  tarball-internal copy / GitHub raw / every CDN). Reads
+  `lib/rigor/module_graph/templates/vendor/MANIFEST.yml` for
+  the provenance metadata. Use on bump PRs; not part of the
+  regular CI pipeline (network-using).
+- CI now runs `rake vendor:verify` independently of
+  pre-commit so an unaudited bump can't land on `main` even
+  if local hooks were skipped.
+- CI now regenerates `examples/billing/` via `script/
+  check_billing_drift.rb` and fails on drift between the
+  freshly-built artefacts and the committed copies.
+  Normalises the graphviz version banner so the runner's
+  apt-shipped version doesn't trigger a false positive.
+
 ### Changed
 
+- **`view --output html` semantics.** The flag now produces
+  the interactive viewer. The previous static Mermaid HTML
+  moves behind `--output mermaid-html` (still loads Mermaid
+  from a CDN, kept for back-compat).
+- CI workflows read Ruby from `.ruby-version` instead of
+  pinning `"4.0.0"` inline, so future `.ruby-version` bumps
+  no longer need a `.github/workflows/` chase.
 - RDoc dependency bumped from `~> 6.0` to `~> 7.0` (resolves
   to 7.2.0). `gemspec.rdoc_options` corrected to `--markup
   markdown` to match `.rdoc_options` and the Rakefile, fixing
