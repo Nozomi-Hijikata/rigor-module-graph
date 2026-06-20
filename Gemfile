@@ -1,5 +1,3 @@
-# frozen_string_literal: true
-
 source "https://rubygems.org"
 
 gemspec
@@ -21,6 +19,6 @@ end
 group :development do
   gem "lefthook", "~> 1.7"
   gem "rubocop", "~> 1.70", require: false
-  gem "rubocop-rake", "~> 0.6", require: false
   gem "rubocop-minitest", "~> 0.36", require: false
+  gem "rubocop-rake", "~> 0.6", require: false
 end
