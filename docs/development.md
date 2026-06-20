@@ -15,6 +15,37 @@ UPDATE_SNAPSHOTS=1 bundle exec rake test   # to refresh snapshots
 bundle exec rake coverage         # C2 (branch) coverage report under ./coverage
 ```
 
+### Vendored third-party JavaScript
+
+`lib/rigor/module_graph/templates/vendor/` carries third-party
+JS the interactive viewer is built on (currently just
+`cytoscape.min.js`). The directory is treated as a sealed
+boundary:
+
+- Each file is pinned to a specific upstream release; the
+  sha256 lives in `vendor/CHECKSUMS` alongside it.
+- `bundle exec rake vendor:verify` recomputes the checksum and
+  fails on mismatch. Pre-commit runs it on any staged file
+  under `lib/**/templates/vendor/**`.
+- Dependabot is configured to ignore this directory entirely
+  (`.github/dependabot.yml`); bumps are manual PRs only.
+- No CDN reference: the gem ships the bytes, the HTML embeds
+  them inline, the user's HTML opens offline.
+
+Bumping a vendored asset:
+
+1. Download the new release from at least two independent
+   sources (a CDN such as jsdelivr / unpkg, plus the GitHub
+   release asset when available).
+2. `shasum -a 256` both files; bytes must match exactly.
+3. Replace the file under `templates/vendor/`, update the
+   matching row in `CHECKSUMS` (sha256, version, release
+   date, source URLs), and refresh the `verified:` line.
+4. `bundle exec rake vendor:verify` to confirm.
+5. Open a manual PR — the vendor file diff is huge by design;
+   the only review surface that matters is the `CHECKSUMS`
+   row plus the upstream release notes.
+
 ### Bundler cooldown (7 days)
 
 `.bundle/config` sets `BUNDLE_COOLDOWN: "7"`, so `bundle

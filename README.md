@@ -85,27 +85,45 @@ defaults to a sensible Rails-shaped value.
 
 ### `view` — one-shot HTML / SVG / Mermaid
 
+The default `html` output is an interactive
+[Cytoscape.js](https://js.cytoscape.org/)-based viewer:
+filter checkboxes for `kind` and `confidence`, live name
+search, `fit` button, and node-click → copy `path:line` to
+the clipboard. The Cytoscape library is vendored into the gem
+at a sha256-pinned version, so the generated HTML opens
+offline with no network round-trip.
+
 ```sh
 # Don't open the browser (just write the HTML)
 rigor-module-graph view --no-open
 
-# Pick a different output format — html (default) opens a viewer
-# in the browser; everything else streams to stdout unless `-o`
-# is given.
+# Pick a different output format. `html` is the interactive
+# viewer; `mermaid-html` is the legacy static-Mermaid embed
+# (loads Mermaid from a CDN, kept for back-compat). Everything
+# else streams to stdout unless `-o` is given.
+rigor-module-graph view --no-open --output mermaid-html  > graph.html
 rigor-module-graph view --no-open --output mermaid       > graph.mmd
 rigor-module-graph view --no-open --output dot           > graph.dot
 rigor-module-graph view --no-open --output svg           > graph.svg
 rigor-module-graph view --no-open --output class-diagram > class.mmd
 rigor-module-graph view --output svg -o graph.svg
 
-# Focus on what's around one or a few constants (Mermaid can't
-# render 1000+-node graphs cleanly — this is the escape hatch)
+# Click on a node opens the file in VSCode rather than copying
+# path:line to the clipboard. `--path-mode none` strips the
+# path metadata entirely — useful when sharing the HTML
+# artefact outside the project.
+rigor-module-graph view --open-with vscode
+rigor-module-graph view --path-mode none      # share-safe
+rigor-module-graph view --path-mode absolute  # cwd-resolved
+
+# Focus on what's around one or a few constants
 rigor-module-graph view --from Article --depth 5
 rigor-module-graph view --from Article --depth 5 --direction out
 rigor-module-graph view --from Billing::Invoice,Billing::Payment --depth 2
 
 # Pick your own collapse list (default: auto-detect top-level
-# namespaces with ≥ 3 members)
+# namespaces with ≥ 3 members; applies to mermaid / dot / svg
+# outputs — the interactive html viewer ignores it).
 rigor-module-graph view --collapse Billing,Auth
 rigor-module-graph view --no-collapse
 
