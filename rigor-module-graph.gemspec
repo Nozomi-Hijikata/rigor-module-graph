@@ -30,7 +30,7 @@ Gem::Specification.new do |spec|
     "homepage_uri" => "https://github.com/nozomemein/rigor-module-graph",
     "rubygems_mfa_required" => "true"
   }
-  spec.rdoc_options = ["--main", "README.md", "--markup", "rdoc"]
+  spec.rdoc_options = ["--main", "README.md", "--markup", "markdown"]
   spec.extra_rdoc_files = ["README.md"]
 
   spec.add_dependency "rigortype", "~> 0.2.1"

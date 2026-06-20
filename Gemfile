@@ -9,7 +9,7 @@ group :development, :test do
   gem "minitest", "~> 5.20"
   gem "minitest-snapshot", "~> 0.1"
   gem "rake", "~> 13.0"
-  gem "rdoc", "~> 6.0"
+  gem "rdoc", "~> 7.0"
   gem "simplecov", "~> 0.22", require: false
   # `benchmark` left the default-gems set in Ruby 4.0; pin so the
   # script/perf-bench.rb harness keeps resolving via bundler.

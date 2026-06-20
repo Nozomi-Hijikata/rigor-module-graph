@@ -17,6 +17,15 @@ Categories:
 
 ## [Unreleased]
 
+### Changed
+
+- RDoc dependency bumped from `~> 6.0` to `~> 7.0` (resolves
+  to 7.2.0). `gemspec.rdoc_options` corrected to `--markup
+  markdown` to match `.rdoc_options` and the Rakefile, fixing
+  the silent inconsistency left when the README rendering
+  fix landed in [0.1.2]. No code change; `rake rdoc` emits no
+  warnings under 7.x.
+
 ## [0.1.2] — 2026-06-20
 
 First release that exercises the full automated pipeline end
