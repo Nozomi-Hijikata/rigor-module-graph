@@ -263,106 +263,32 @@ Each edge in the JSONL file looks like:
 The renderers dedup by `(from, to, kind, confidence)` so two
 `include Foo` on the same class across files collapse to one edge.
 
-## Development
-
-```sh
-bundle install
-bundle exec lefthook install      # wire pre-commit / pre-push hooks
-bundle exec rake test
-UPDATE_SNAPSHOTS=1 bundle exec rake test   # to refresh snapshots
-bundle exec rake coverage         # C2 (branch) coverage report under ./coverage
-```
-
-### Git hooks
-
-`lefthook.yml` wires five checks. The split is "fast on every
-commit, full suite on push":
-
-| hook       | command       | scope                                    |
-|------------|---------------|------------------------------------------|
-| pre-commit | rubocop       | staged Ruby files                        |
-| pre-commit | betterleaks   | staged content, secret scan              |
-| pre-commit | rigor check   | staged Ruby files (`lib/**/*.rb`)        |
-| pre-commit | zizmor        | staged GitHub Actions workflow files     |
-| pre-push   | minitest      | full `rake test`                         |
-
-The pre-commit checks run in parallel; on this repo they finish
-in ~1 second together. `betterleaks` (`brew install betterleaks`
-on macOS) and `zizmor` (`brew install zizmor` or `pipx install
-zizmor`) are external binaries — the others come in through
-Bundler. `rubocop` re-stages autocorrected files. `zizmor` is
-gated on workflow files only so day-to-day commits don't trigger
-it.
-
-Skip a hook ad-hoc with `LEFTHOOK_EXCLUDE=<command>` (e.g.
-`LEFTHOOK_EXCLUDE=rigor git commit ...`).
-
-### CI / Release
-
-Three GitHub Actions workflows under `.github/workflows/`:
-
-- **`ci.yml`** — runs on every push and PR to `main`. Three
-  jobs: `test` (minitest, then minitest with C2 coverage,
-  uploads `coverage/`), `lint` (RuboCop + `rigor check lib`),
-  and `workflow-lint` (zizmor over the workflow files
-  themselves). All jobs cache the bundler install keyed on
-  `Gemfile.lock`.
-- **`docs.yml`** — runs on push to `main`. Generates RDoc via
-  `bundle exec rake rdoc` and deploys `doc/` to GitHub Pages.
-  The live site is at
-  <https://nozomemein.github.io/rigor-module-graph/>.
-- **`release.yml`** — manual trigger (`workflow_dispatch`).
-  Builds the gem, runs tests, and pushes to RubyGems via
-  [trusted publishing](https://guides.rubygems.org/trusted-publishing/)
-  — no long-lived API token. Toggle the `dry_run` input to
-  validate the pipeline without uploading. Configure the trusted
-  publisher under the gem's rubygems.org settings before the
-  first run.
-
-The test suite covers:
-
-- `ConstantName`, `Edge`, `Analyzer`, `CycleDetector`,
-  `ZeitwerkResolver` as unit tests
-- `Dot`, `Mermaid` rendering via `minitest-snapshot`
-- An integration test that boots the real `rigor` binary against
-  `test/fixtures/rails_app/` and snapshots the edges JSONL
-
-## Documentation
-
-The public API is documented with RDoc. Generate it locally and
-browse:
-
-```sh
-bundle exec rake rdoc            # writes ./doc
-bundle exec rake rdoc:preview    # writes ./doc and opens index.html
-bundle exec rake rdoc:server     # serves on http://localhost:8808 via `ri --server`
-```
-
-`rake rdoc:preview` honours `$BROWSER` if set; otherwise it falls
-back to `open` on macOS and `xdg-open` elsewhere.
-
-Online docs are published from `main` to GitHub Pages by the
-`docs.yml` workflow: <https://nozomemein.github.io/rigor-module-graph/>.
-Rubydoc.info mirrors the latest released gem at
-<https://rubydoc.info/gems/rigor-module-graph>.
-
-The version history lives in [CHANGELOG.md](CHANGELOG.md), formatted
-per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) with
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). The
-release workflow gates on a `## [VERSION]` entry being present
-before pushing to RubyGems.
-
 ## Compatibility
 
 - Ruby `>= 4.0.0, < 4.1`
 - rigortype `~> 0.2.1`
 - rbs `~> 4.0`
 
-## Further reading
+## Documentation
 
-- [`docs/plan.md`](docs/plan.md) — the per-phase implementation
-  plan with the decisions and trade-offs taken at each step.
-- [`docs/limitation.md`](docs/limitation.md) — known limitations
-  shipped with the current release (visibility tracker gaps, the
+The public RDoc API is generated locally via `rake rdoc`,
+served on `http://localhost:8808` via `rake rdoc:server`, and
+published to GitHub Pages on every push to `main`.
+
+- [API reference (GitHub Pages)](https://nozomemein.github.io/rigor-module-graph/) —
+  built from `main`, mirrors the current source.
+- [API reference (RubyGems)](https://rubydoc.info/gems/rigor-module-graph) —
+  the last released gem on rubydoc.info.
+- [Development guide](docs/development.md) — local setup, git
+  hooks, CI / Release workflows, test suite layout.
+- [Design plan](docs/plan.md) — the decisions still
+  load-bearing for the code (edge model, confidence ladder,
+  output channel, owner resolution, architecture map).
+- [Known limitations](docs/limitation.md) — rough edges shipped
+  with the current release (visibility tracker gaps, the
   bundled inflector, Mermaid 10.x quirks).
-- [`CHANGELOG.md`](CHANGELOG.md) — per-version changes.
+- [Changelog](CHANGELOG.md) — per-version changes, formatted
+  per [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+  with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+  The release workflow gates on a `## [VERSION]` entry being
+  present before pushing to RubyGems.
