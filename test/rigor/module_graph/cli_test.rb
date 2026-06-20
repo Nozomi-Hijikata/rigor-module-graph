@@ -63,13 +63,13 @@ class CLITest < Minitest::Test
   def test_version_subcommand
     status, out, _err = run_cli(["version"])
     assert_equal 0, status
-    assert_equal "#{Rigor::ModuleGraph::VERSION}\n", out
+    assert_equal "rigor-module-graph #{Rigor::ModuleGraph::VERSION}\n", out
   end
 
   def test_dash_v_version
     status, out, _err = run_cli(["-v"])
     assert_equal 0, status
-    assert_match(/\d+\.\d+\.\d+/, out)
+    assert_match(/\Arigor-module-graph \d+\.\d+\.\d+\n\z/, out)
   end
 
   def test_dash_h_help

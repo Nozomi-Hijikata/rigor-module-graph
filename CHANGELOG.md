@@ -17,6 +17,63 @@ Categories:
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-06-20
+
+First Action-driven release. Code change is intentionally
+small; the bulk of this version is the post-0.1.0 release
+plumbing and a correctness fix the example surfaced.
+
+### Added
+
+- `--version` / `-v` / `version` now prints
+  `rigor-module-graph X.Y.Z` (gem name + version), matching the
+  convention `bundler --version` and `gh --version` use, so the
+  output is self-identifying when pasted into a bug report.
+- Documentation set restructured: `docs/development.md`
+  (setup, hooks, workflows, release flow), `docs/plan.md`
+  (design decisions), `docs/limitation.md` (rough edges). RDoc
+  picks them all up via the `docs/*.md` glob; the README's
+  Documentation block is a single named-link index.
+
+### Fixed
+
+- `has_many :invoices` inside a namespaced class now resolves
+  the association target against the lexical namespace
+  (`Billing::Customer.has_many :invoices` → `Billing::Invoice`,
+  not the top-level `Invoice`). Matches Rails' `compute_type`
+  walk; the explicit `class_name:` override still wins.
+
+### Changed
+
+- Lefthook `rubocop` and `rigor` hooks run against the whole
+  project rather than staged files only, so the local hook
+  catches the same drift CI does.
+- All GitHub Actions workflow steps are SHA-pinned with the
+  human-readable tag in a trailing comment. `zizmor` enforces
+  the same policy in CI.
+- `actions/checkout` and `actions/upload-artifact` bumped to v7
+  for Node 24 native execution; the Node 20 deprecation banner
+  is gone.
+
+### Added (CI / Release / Docs)
+
+- `release.yml` — manual `workflow_dispatch` publish via
+  RubyGems Trusted Publishing (OIDC, no long-lived API key).
+  Gates on a `## [VERSION]` heading existing in `CHANGELOG.md`
+  before the gem build; a `dry_run` input runs the pipeline
+  without the final push.
+- `docs.yml` — RDoc deploy to GitHub Pages on every push to
+  `main`. Live at
+  <https://nozomemein.github.io/rigor-module-graph/>.
+- `purge-readme.yml` — push-time `PURGE` of
+  `camo.githubusercontent.com` so README image updates take
+  effect without waiting for the ~24h cache.
+- `ci.yml` `workflow-lint` job — zizmor over the workflow
+  files themselves, with `security-events: write` so findings
+  surface in the Security tab.
+- MIT `LICENSE.txt`. The `spec.license = "MIT"` line in the
+  gemspec finally has a matching file on disk.
+
 ## [0.1.0] — 2026-06-20
 
 Initial release. Baseline shipping everything from the Phase 0
@@ -114,5 +171,6 @@ spike through Phase 5 (UML class diagram).
   baseline and YJIT, and trailed baseline on Stats and
   CycleDetector — recommendation stays YJIT.
 
-[Unreleased]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nozomemein/rigor-module-graph/releases/tag/v0.1.0

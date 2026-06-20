@@ -5,6 +5,6 @@ module Rigor
   # an overview and Rigor::ModuleGraph::CLI for the CLI surface.
   module ModuleGraph
     # The installed gem version.
-    VERSION = "0.1.0"
+    VERSION = "0.1.1"
   end
 end

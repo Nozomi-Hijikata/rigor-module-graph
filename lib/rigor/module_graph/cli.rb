@@ -66,7 +66,7 @@ module Rigor
           stdout.puts USAGE
           0
         when "version", "-v", "--version"
-          stdout.puts Rigor::ModuleGraph::VERSION
+          stdout.puts "rigor-module-graph #{Rigor::ModuleGraph::VERSION}"
           0
         else
           stderr.puts "rigor-module-graph: unknown command #{command.inspect}"
