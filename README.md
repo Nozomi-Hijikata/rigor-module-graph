@@ -1,5 +1,10 @@
 # rigor-module-graph
 
+[![Gem Version](https://img.shields.io/gem/v/rigor-module-graph.svg)](https://rubygems.org/gems/rigor-module-graph)
+[![License: MIT](https://img.shields.io/github/license/nozomemein/rigor-module-graph.svg)](LICENSE.txt)
+[![CI](https://github.com/nozomemein/rigor-module-graph/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nozomemein/rigor-module-graph/actions/workflows/ci.yml)
+[![Docs](https://github.com/nozomemein/rigor-module-graph/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/nozomemein/rigor-module-graph/actions/workflows/docs.yml)
+
 Class/module/constant dependency graph for Ruby projects, built on
 [Rigor](https://rigor.typedduck.fail/). The class-level counterpart
 to Packwerk/Graphwerk: where those look at package boundaries, this
