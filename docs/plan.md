@@ -236,24 +236,112 @@ Mermaid's `flowchart` parser starts failing somewhere above
 real-world Rails apps land. The existing `--from` / `--depth`
 flags are escape hatches, not a fix.
 
-Replace the static Mermaid embed with a
-[Cytoscape.js](https://js.cytoscape.org/) (or vis.js) viewer
-that:
+**Approach**: replace the static Mermaid embed with
+[Cytoscape.js](https://js.cytoscape.org/) (MIT, transitive-dep
+free), **vendored into the repo at a pinned version with a
+sha256 checksum**. No CDN, no npm, no Dependabot auto-bump.
+Cytoscape was chosen over a homegrown SVG layer after
+weighing the trade-offs — see "Alternatives considered" below.
 
-- Renders 10k+ nodes without browser strain.
+Features in scope:
+
+- Renders 5k+ nodes without browser strain (Cytoscape's
+  selectors + viewport culling do the heavy lifting).
 - Live-filters by `kind` / `confidence` / name substring
   without round-tripping through the CLI.
-- Click on a node copies its `path:line` to the clipboard or
-  opens it in the editor via the `file://` scheme.
+- Click on a node copies its `path:line` to the clipboard;
+  `--open-with vscode` opt-in flips the click action to open
+  `vscode://file/<path>:<line>`.
 - Click on a namespace cluster collapses / expands it
   in-place; the auto-collapse heuristic stays as the default
-  starting state.
+  starting state. Cytoscape's `compound nodes` give this
+  natively.
 
-Non-3D deliberately. Depth perception costs readability with
-no compensating gain — see `2026-06-XX` discussion in the
-roadmap thread for the full reasoning.
+Deliberately out of scope: 3D rendering (depth perception
+costs readability for dependency graphs, no compensating gain),
+client-side relayout when the data changes (we re-run `view`
+instead), persistent filter state in URL params.
 
-The CLI surface stays the same (`--output html`); only the
-embedded JavaScript changes. The current Mermaid path can stay
-behind `--output mermaid-html` for users who want the static
-artefact for docs.
+#### Supply-chain controls
+
+The single concession to bringing in a third-party JS library
+is paid back with these guardrails:
+
+- Single file vendored under
+  `lib/rigor/module_graph/templates/vendor/cytoscape.min.js`,
+  shipped in the gem via an updated `spec.files` glob.
+- Pinned to a specific upstream release tag, never `latest`.
+- `vendor/CHECKSUMS` records the sha256; `rake vendor:verify`
+  recomputes and fails on mismatch. Pre-commit runs it on any
+  staged file under `lib/**/vendor/**`.
+- No CDN reference — the script tag points at the vendored
+  copy only, so an HTML artefact opened offline still works.
+- Dependabot config explicitly ignores `lib/**/vendor/**` so
+  Cytoscape bumps are always a manual PR that re-runs
+  `vendor:verify` against a fresh upstream checksum.
+- `Content-Security-Policy: default-src 'self'; script-src
+  'self' 'unsafe-inline'` in the HTML `<head>`; `'unsafe-inline'`
+  is the only concession (we generate inline JSON data) and it
+  applies to the vendored file too.
+- The viewer file (~100 lines) and the vendored cytoscape are
+  the only JS that ever runs; both reviewable in one sitting.
+
+#### Data flow
+
+```
+edges.jsonl + nodes.jsonl
+    ↓
+Viewer::Html.render(edges:, nodes:, ...)
+    ↓
+HTML template embeds:
+  <header>filter controls + search</header>
+  <div id="cy">                       ← Cytoscape mount point
+  <script type="application/json" id="rmg-data">  ← node + edge dataset
+    {"nodes":[...], "edges":[...], "options": {...}}
+  </script>
+  <script src="vendor/cytoscape.min.js"></script>
+  <script>                            ← our ~100-line init
+    const data = JSON.parse(document.getElementById('rmg-data').textContent);
+    cytoscape({container: document.getElementById('cy'), elements: ..., style: ..., layout: ...});
+    // filter / search / click handlers wire into cy.elements().style() and event listeners
+  </script>
+```
+
+Click metadata sourced from `nodes.jsonl` (the canonical
+"where is this constant defined") rather than edges, since
+edge dedup ignores `path` / `line` and would lose the
+location. `node.path` is normalised to a project-relative
+path by default; absolute path requires `--path-mode absolute`.
+
+#### Alternatives considered
+
+| approach | pro | con | verdict |
+|---|---|---|---|
+| **Cytoscape.js vendored (chosen)** | proven library, native cluster collapse, ~100 LOC of our code, 600KB single-file with zero transitive deps | one third-party library (audited, MIT, no transitive deps) | adopted |
+| Homegrown SVG + ~250 LOC of vanilla JS | zero third-party JS | cluster collapse, search index, hit testing all need to be hand-written; ~250 LOC estimate proven optimistic in review | rejected — self-written XSS / event-handler bugs are a worse supply-chain risk than one audited vendor file |
+| CDN reference to Cytoscape | no file to vendor | CDN compromise = script injection into every user's view; offline use breaks | rejected outright |
+| D3 force layout (~80KB) | smaller vendor footprint | re-runs layout client-side every load; loses dot's hierarchical clarity for inheritance graphs | rejected |
+| vis.js | similar feature set to Cytoscape | larger, less stable history, transitive deps | rejected |
+
+#### Phase breakdown
+
+1. **`docs/plan.md`** — this section (current commit).
+2. **Vendor cytoscape.min.js** — download, pin version,
+   record sha256 in `vendor/CHECKSUMS`, add
+   `rake vendor:verify`, update `gemspec.files`.
+3. **`Viewer::Html` Ruby class** — builds the HTML page,
+   serialises edges + nodes to JSON, wires the
+   `<script src="vendor/cytoscape.min.js">` reference. Snapshot
+   tests under `test/rigor/module_graph/viewer/`.
+4. **Inline init JS** — ~100 lines for Cytoscape config +
+   filter / search / click handlers + cluster collapse.
+5. **CLI wiring** — `--output html` → `Viewer::Html`;
+   `--output mermaid-html` → existing static-Mermaid path
+   (renamed but preserved); `--path-mode {relative,absolute,none}`
+   default `relative`; `--open-with vscode` opt-in.
+6. **Docs / README / CHANGELOG** — update Usage section,
+   document the vendor policy in `docs/development.md`, add
+   `[Unreleased]` entry.
+7. **Performance fixture** — synthetic 1.5k / 5k node
+   fixtures committed; manual benchmark numbers recorded in
+   the PR description.
