@@ -69,4 +69,51 @@ task :coverage do
   Rake::Task[:test].invoke
 end
 
+namespace :vendor do
+  desc "Verify sha256 of each vendored asset against vendor/CHECKSUMS"
+  task :verify do
+    require "digest"
+
+    dir = File.expand_path("lib/rigor/module_graph/templates/vendor", __dir__)
+    checksums_path = File.join(dir, "CHECKSUMS")
+    unless File.exist?(checksums_path)
+      abort "vendor:verify: #{checksums_path} not found"
+    end
+
+    failures = []
+    seen = 0
+    File.foreach(checksums_path) do |line|
+      line = line.strip
+      next if line.empty? || line.start_with?("#")
+
+      expected, filename = line.split(/\s+/, 2)
+      unless expected && filename
+        failures << "  malformed line: #{line.inspect}"
+        next
+      end
+
+      path = File.join(dir, filename)
+      unless File.exist?(path)
+        failures << "  #{filename}: file missing"
+        next
+      end
+
+      actual = Digest::SHA256.file(path).hexdigest
+      if actual == expected
+        seen += 1
+      else
+        failures << "  #{filename}: expected #{expected}, got #{actual}"
+      end
+    end
+
+    if failures.empty?
+      puts "vendor:verify: #{seen} file(s) match CHECKSUMS"
+    else
+      puts "vendor:verify: mismatch detected"
+      failures.each { |line| puts line }
+      abort
+    end
+  end
+end
+
 task default: :test

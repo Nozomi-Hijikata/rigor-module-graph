@@ -40,6 +40,15 @@ pre-commit:
       glob: ".github/workflows/*.{yml,yaml}"
       run: zizmor {staged_files}
 
+    vendor-verify:
+      tags: security
+      # Re-check sha256 of every vendored asset whenever the
+      # vendor directory is touched. Catches both corrupted
+      # bytes and "bumped the JS but forgot to update
+      # CHECKSUMS" before the change leaves the laptop.
+      glob: "lib/**/templates/vendor/**"
+      run: bundle exec rake vendor:verify
+
 pre-push:
   commands:
     minitest:

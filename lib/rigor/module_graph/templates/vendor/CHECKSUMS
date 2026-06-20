@@ -1,0 +1,30 @@
+# Vendored third-party assets.
+#
+# Each row pins a file in this directory to a specific upstream
+# release plus a sha256 of the bytes that release ships. The
+# checksum is what `rake vendor:verify` re-computes and fails
+# on mismatch — a CI break here means "the vendored file on
+# disk no longer matches what we said it does", which is the
+# signal we want.
+#
+# Bumping a vendored dependency:
+#   1. Download the new release from upstream + at least one
+#      mirror (CDN or GitHub release asset).
+#   2. Cross-check sha256 across sources before trusting the
+#      bytes.
+#   3. Update this file (filename, version, source URL, sha256).
+#   4. Open a manual PR — Dependabot is configured to ignore
+#      this directory.
+#
+# Format: sha256 (64 hex chars)  two spaces  filename
+# Lines starting with `#` and blank lines are ignored.
+#
+# ---
+# cytoscape.min.js
+#   upstream:  https://github.com/cytoscape/cytoscape.js
+#   release:   v3.34.0 (2026-06-02)
+#   license:   MIT (https://github.com/cytoscape/cytoscape.js/blob/master/LICENSE)
+#   sources:   https://cdn.jsdelivr.net/npm/cytoscape@3.34.0/dist/cytoscape.min.js
+#              https://unpkg.com/cytoscape@3.34.0/dist/cytoscape.min.js
+#   verified:  2026-06-20 (both sources returned byte-identical content)
+9c2a3bf2592e0b14a1f7bec07c03a54f16dedf32af9cd0af155c716aa6c87bc3  cytoscape.min.js
