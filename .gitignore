@@ -1,4 +1,5 @@
-/.bundle/
+/.bundle/*
+!/.bundle/config
 /vendor/bundle/
 /pkg/
 /doc/

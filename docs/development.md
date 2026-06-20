@@ -15,6 +15,19 @@ UPDATE_SNAPSHOTS=1 bundle exec rake test   # to refresh snapshots
 bundle exec rake coverage         # C2 (branch) coverage report under ./coverage
 ```
 
+### Bundler cooldown (7 days)
+
+`.bundle/config` sets `BUNDLE_COOLDOWN: "7"`, so `bundle
+install` / `bundle update` will not pick up a dependency
+version that's been live on rubygems.org for less than seven
+days. This is the supply-chain-attack mitigation Bundler 2.6+
+ships: a malicious gem yanked within hours of publication
+never enters the lockfile in the first place.
+
+The file is committed; the rest of `.bundle/` stays in
+`.gitignore`. To opt out for a single install: `BUNDLE_COOLDOWN=0
+bundle install`.
+
 ## Git hooks
 
 `lefthook.yml` wires five checks. The split is "fast on every
@@ -120,18 +133,32 @@ the gem's rubygems.org settings (a one-time setup; see the
    ```
 6. Verify: `gem info rigor-module-graph --remote`.
 
-What the workflow does in order: checkout → Ruby setup
-(bundler-cache off) → `bundle install` → CHANGELOG section
-check → `rake test` → `gem build` → `gem unpack` sanity check
-→ upload artefact (7-day retention) → `gem push` via OIDC.
+What the workflow does in order: checkout (full tag history) →
+Ruby setup (bundler-cache off) → `bundle install` → preflight
+(CHANGELOG `## [X.Y.Z]` exists, `vX.Y.Z` tag exists locally,
+tag points at HEAD) → extract the CHANGELOG slice into the
+GitHub Release notes file → `rake test` → `rake build` (sanity
+check) → unpack the gem → upload as artefact (7 days) →
+`rake release` via `rubygems/release-gem` (OIDC, no API key) →
+`gh release create` attaches the gem to the GitHub Release.
+
+The `Bundler::GemHelper` flow `rake release` runs under the
+hood: build → guard_clean → tag push (no-op when already on
+origin) → `gem push`. We rely on the Rakefile's
+`require "bundler/gem_tasks"` for those task definitions, which
+is the convention `rubygems/release-gem` expects.
 
 Failure modes worth knowing:
 
 | symptom | cause | fix |
 |---|---|---|
-| `CHANGELOG.md has no section for version X.Y.Z` | the gate at step 2 wasn't satisfied | add the heading, recommit, re-run |
-| `OIDC token verification failed` | trusted publisher missing or mismatched | check the four fields on rubygems.org match `nozomemein/rigor-module-graph` + `release.yml` + `rubygems` |
+| `CHANGELOG.md has no section for version X.Y.Z` | preflight gate | add the heading, recommit, re-run |
+| `Tag vX.Y.Z does not exist` | tag wasn't pushed | `git tag vX.Y.Z && git push --tags` |
+| `Tag vX.Y.Z points at <sha>, but this run builds <sha>` | tagged an older commit, then bumped VERSION | `git tag -f vX.Y.Z && git push --tags --force`, or revert HEAD |
+| `Extracted release notes are empty` | CHANGELOG section is whitespace-only | add real content under the `## [X.Y.Z]` heading |
+| `OIDC token verification failed` | trusted publisher missing / mismatched | check rubygems.org Trusted Publisher fields against `nozomemein/rigor-module-graph` + `release.yml` + `rubygems` |
 | `Gem version X.Y.Z already exists` | the version was pushed before | bump to the next patch — rubygems.org refuses overwrites |
+| `gh release create` fails after `gem push` succeeds | rare; `gh` API hiccup | run `gh release create vX.Y.Z --notes-file <(awk ...) pkg/*.gem` manually with the same extraction snippet from `release.yml` |
 
 The CLI fallback (`gem build` + `gem push`) stays available for
 the rare case the workflow itself breaks and a hotfix can't

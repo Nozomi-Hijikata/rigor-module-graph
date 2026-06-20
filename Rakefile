@@ -1,5 +1,12 @@
 require "rake/testtask"
 require "rdoc/task"
+# Defines `rake build` / `rake release` per the `Bundler::GemHelper`
+# convention. `rake release` is what `rubygems/release-gem` (the
+# action used in `.github/workflows/release.yml`) invokes under
+# the hood: build the gem into `pkg/`, guard a clean working
+# tree, push the tag (no-op when already pushed), then push to
+# RubyGems via the OIDC credentials the action wires up.
+require "bundler/gem_tasks"
 
 Rake::TestTask.new(:test) do |t|
   t.libs << "test"
