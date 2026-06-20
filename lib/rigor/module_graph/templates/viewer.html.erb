@@ -18,6 +18,14 @@
     <fieldset id="filter-kind"><legend>kind</legend></fieldset>
     <fieldset id="filter-confidence"><legend>confidence</legend></fieldset>
     <input id="search" type="search" placeholder="search nodes...">
+    <label for="layout-pick">layout</label>
+    <select id="layout-pick">
+      <option value="cose" selected>cose (force-directed)</option>
+      <option value="breadthfirst">breadthfirst (hierarchical)</option>
+      <option value="concentric">concentric (by degree)</option>
+      <option value="circle">circle</option>
+      <option value="grid">grid</option>
+    </select>
     <button id="fit" type="button">fit</button>
     <span id="counts"></span>
   </div>

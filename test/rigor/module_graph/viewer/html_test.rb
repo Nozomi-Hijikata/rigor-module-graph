@@ -153,6 +153,101 @@ class ViewerHtmlTest < Minitest::Test
     assert_includes html, "A<\\/script>X"
   end
 
+  # --- compound nodes (namespace grouping) ---
+
+  def test_build_data_with_collapse_wraps_matching_nodes_in_a_compound_parent
+    data = Rigor::ModuleGraph::Viewer::Html.build_data(
+      edges: edges, nodes: nodes,
+      path_mode: :relative, open_with: nil,
+      collapse: %w[Billing]
+    )
+
+    compounds = data[:nodes].select { |n| n[:data][:kind] == "compound" }
+    assert_equal 1, compounds.length
+    assert_equal "Billing", compounds.first[:data][:id]
+
+    invoice = data[:nodes].find { |n| n[:data][:id] == "Billing::Invoice" }
+    assert_equal "Billing", invoice[:data][:parent]
+    # Label is stripped of the parent's prefix so the compound
+    # carries the namespace name and the child shows the short
+    # constant. Same shape as the Mermaid subgraph renderer.
+    assert_equal "Invoice", invoice[:data][:name]
+  end
+
+  def test_build_data_with_no_collapse_emits_no_compound_nodes
+    data = Rigor::ModuleGraph::Viewer::Html.build_data(
+      edges: edges, nodes: nodes,
+      path_mode: :relative, open_with: nil
+    )
+    refute(data[:nodes].any? { |n| n[:data][:kind] == "compound" })
+    invoice = data[:nodes].find { |n| n[:data][:id] == "Billing::Invoice" }
+    refute_includes invoice[:data], :parent
+    assert_equal "Billing::Invoice", invoice[:data][:name]
+  end
+
+  def test_build_data_explicit_groups_override_collapse
+    data = Rigor::ModuleGraph::Viewer::Html.build_data(
+      edges: edges, nodes: nodes,
+      path_mode: :relative, open_with: nil,
+      collapse: %w[Billing],
+      groups: { "Billing::Invoice" => "billing-pkg" }
+    )
+    invoice = data[:nodes].find { |n| n[:data][:id] == "Billing::Invoice" }
+    assert_equal "billing-pkg", invoice[:data][:parent]
+    # ApplicationRecord isn't in `groups`, so it stays parent-less
+    # even though `collapse` would have ignored it anyway.
+    app_record = data[:nodes].find { |n| n[:data][:id] == "ApplicationRecord" }
+    refute_includes app_record[:data], :parent
+  end
+
+  def test_build_data_longest_collapse_prefix_wins
+    # `Foo::Bar::Customer` should bucket under `Foo::Bar`,
+    # not `Foo`, when both prefixes are listed.
+    deep = [
+      Rigor::ModuleGraph::Node.build(
+        kind: "class", name: "Customer", owner: "Foo::Bar"
+      )
+    ]
+    deep_edges = [
+      Rigor::ModuleGraph::Edge.build(
+        from: "Foo::Bar::Customer", to: "ApplicationRecord",
+        kind: "inherits", confidence: "syntax"
+      )
+    ]
+    data = Rigor::ModuleGraph::Viewer::Html.build_data(
+      edges: deep_edges, nodes: deep,
+      path_mode: :relative, open_with: nil,
+      collapse: %w[Foo Foo::Bar]
+    )
+    customer = data[:nodes].find { |n| n[:data][:id] == "Foo::Bar::Customer" }
+    assert_equal "Foo::Bar", customer[:data][:parent]
+    assert_equal "Customer", customer[:data][:name]
+  end
+
+  def test_build_data_external_endpoints_also_get_parented_when_prefix_matches
+    # Strictly hypothetical, but it's the right behaviour:
+    # a `to` constant that happens to start with a collapsed
+    # prefix still belongs in the cluster, even when there's
+    # no local node definition for it.
+    cross = [
+      Rigor::ModuleGraph::Edge.build(
+        from: "Billing::Invoice", to: "Billing::ApplicationRecord",
+        kind: "inherits", confidence: "syntax"
+      )
+    ]
+    data = Rigor::ModuleGraph::Viewer::Html.build_data(
+      edges: cross, nodes: nodes,
+      path_mode: :relative, open_with: nil,
+      collapse: %w[Billing]
+    )
+    external = data[:nodes].find { |n| n[:data][:id] == "Billing::ApplicationRecord" }
+    assert_equal "external", external[:data][:kind]
+    assert_equal "Billing", external[:data][:parent]
+    assert_equal "ApplicationRecord", external[:data][:name]
+  end
+
+  # ---
+
   def test_render_html_escapes_the_title
     html = Rigor::ModuleGraph::Viewer::Html.render(
       edges: edges, nodes: nodes, title: "<x>"
