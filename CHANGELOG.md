@@ -17,6 +17,17 @@ Categories:
 
 ## [Unreleased]
 
+### Changed
+
+- README restructured along the install → getting started →
+  usage → configuration flow. The "How it works" walkthrough
+  (pipeline diagram + the "not a call graph" framing) moves to
+  `docs/how-it-works.md` so the README stays focused on
+  "what do I type". Configuration section now notes that
+  `.rigor.yml` is required (rigor reads it to discover the
+  plugin), with a two-line minimum example up top and the
+  fully-elaborated default form below.
+
 ### Fixed
 
 - RDoc generation now parses Markdown instead of RDoc syntax,

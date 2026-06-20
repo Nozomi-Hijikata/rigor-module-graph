@@ -16,54 +16,7 @@ looks at the Ruby nominal graph — inheritance, `include`/`prepend`/
 The screenshot above is from `examples/billing/`. Open
 `examples/billing/index.html` for the live Mermaid version.
 
-## What this actually does
-
-In principle this is a static-analysis tool that turns Ruby source
-into a graph whose **nodes are classes / modules / constants** and
-whose **edges are the references the language itself spells out**.
-
-The pipeline:
-
-1. Rigor parses Ruby into an AST with Prism.
-2. The plugin's `node_rule`s pick up `ClassNode` / `CallNode` /
-   `ConstantReadNode` and friends.
-3. Each interesting node becomes one or more edges:
-   - `class A < B` → `A -> B / inherits`
-   - `include M` → `A -> M / include`
-   - a `Money` constant reference → `A -> Money / const_ref`
-     (Phase 2 and later)
-4. `from` is the lexical owner, assembled by walking
-   `context.ancestors` — so `class Billing::Invoice` produces
-   `Billing::Invoice`, not just `Invoice`.
-5. `to` is resolved through a confidence ladder: syntax →
-   Zeitwerk convention → Rigor type information. Whatever we
-   couldn't pin down stays visible in the `confidence` field
-   rather than being dropped.
-6. Every edge ships as a Rigor `:info` diagnostic. The `collect`
-   subcommand filters them on `rule == "edge"` and writes JSONL.
-7. DOT, SVG, Mermaid, and cycle detection are all derived from
-   that JSONL.
-
-So we are not watching what Ruby *does at runtime*. We're reading
-Ruby's *named structure* and reconstructing, approximately, "which
-constants depend on which other constants".
-
-### This is not a call graph
-
-We do not track who `foo.bar` resolves to at runtime. We track
-the fact that the `Billing::Invoice` name depends on the
-`ApplicationRecord` / `Auditable` / `Money` names. That is a
-**nominal dependency graph** — a compiler-front-end-style view
-of the project's syntactic and lexical structure, projected into
-edges with explicit confidence.
-
-Not re-implementing Ruby constant lookup is deliberate. For
-understanding a Rails codebase's shape, it's more useful to leave
-each edge tagged `syntax` / `zeitwerk` / `rigor_type` /
-`unresolved` than to fake a `resolved` answer and silently get it
-wrong.
-
-## Installation
+## Install
 
 Via Bundler:
 
@@ -76,65 +29,61 @@ gem "rigor-module-graph"
 bundle install
 ```
 
-Or globally:
+Or system-wide:
 
 ```sh
 gem install rigor-module-graph
 ```
 
-Both paths pull in `rigortype` and `rbs ~> 4.0` transitively. The
-`rbs ~> 4.0` constraint is the key one: rigortype 0.2.x calls
-`RBS::Environment::ClassEntry#each_decl`, which only exists in
-rbs 4.x. The Ruby 4.0 stdlib bundles rbs 3.10 as a default gem,
-so installing `rigor-module-graph` (which depends on rbs 4.x)
-makes RubyGems activate the 4.x gem at run time and the
-analyzer stays alive.
+Both paths pull in `rigortype` and `rbs ~> 4.0` transitively.
+The `rbs ~> 4.0` constraint is the one that matters: rigortype
+0.2.x calls `RBS::Environment::ClassEntry#each_decl`, which
+only exists in rbs 4.x. The Ruby 4.0 stdlib bundles rbs 3.10
+as a default gem, so installing `rigor-module-graph` (which
+depends on rbs 4.x) makes RubyGems activate the 4.x gem at
+run time and the analyzer stays alive.
 
-## Configuration
+For the full pipeline you also want `graphviz` installed so
+`view --output svg` and `dot -Tsvg` can render PNG / SVG from
+the generated DOT:
 
-Add the plugin to your project's `.rigor.yml`:
-
-```yaml
-target_ruby: '4.0'
-paths:
-  - app
-  - lib
-plugins:
-  - gem: rigor-module-graph
-    config:
-      rails_zeitwerk: true
-      autoload_paths:
-        - app/models
-        - app/controllers
-        - app/services
-        - app/jobs
-        - lib
-      concern_dirs:
-        - app/models/concerns
-        - app/controllers/concerns
-      include_constant_refs: false
+```sh
+brew install graphviz       # macOS
+apt-get install graphviz    # Debian / Ubuntu
 ```
 
-Every key shown is the default. Set `include_constant_refs: true`
-to emit `const_ref` edges from constant references inside method
-bodies. Set `rails_zeitwerk: false` to keep every edge at
-`confidence: "syntax"` and skip path-based owner inference.
+A working `dot` on `$PATH` is optional — text / Mermaid / HTML
+output paths don't need it. See [How it works](docs/how-it-works.md)
+for the pipeline overview.
 
-## Usage
+## Getting started
 
-### One-shot: `view`
-
-The default subcommand analyses the current directory, writes a
-self-contained Mermaid HTML report under `.rigor/module_graph/`,
-and opens it in your browser. No flags needed for a Rails-shaped
-project.
+The default subcommand analyses the current directory, writes
+a self-contained Mermaid HTML report under
+`.rigor/module_graph/`, and opens it in a browser:
 
 ```sh
 cd path/to/your/project
 bundle exec rigor-module-graph         # same as: rigor-module-graph view
 ```
 
-Useful flags:
+A `.rigor.yml` must exist in the project root — that's how
+`rigor` knows to load this plugin. The minimal version is two
+lines:
+
+```yaml
+plugins:
+  - gem: rigor-module-graph
+```
+
+That's enough for `view` to run with all defaults. Everything
+else (`paths:`, `autoload_paths:`, …) goes in the
+[Configuration](#configuration) section below, and every key
+defaults to a sensible Rails-shaped value.
+
+## Usage
+
+### `view` — one-shot HTML / SVG / Mermaid
 
 ```sh
 # Don't open the browser (just write the HTML)
@@ -169,7 +118,7 @@ rigor-module-graph view --package
 rigor-module-graph view --package-root /path/to/repo
 ```
 
-`--direction` controls how the +--from+ walk follows edges:
+`--direction` controls how the `--from` walk follows edges:
 
 | direction | meaning                                |
 |-----------|----------------------------------------|
@@ -184,17 +133,19 @@ rigor-module-graph view --package-root /path/to/repo
 | `cluster`  | keep every edge whose endpoints both fall in the reachable set (default — good for "show me the Article neighbourhood as a cluster") |
 | `walk`     | keep only the edges the BFS actually traversed (good for "show me what depends on Article and nothing else"; drops sibling edges like `Foo inherits ApplicationRecord` that just happen to share a base class with reachable nodes) |
 
-A 1-hop `--from Article --direction out --edge-scope walk` returns
-exactly the edges whose `from` is `Article`, never the sibling
-`inherits ApplicationRecord` of a reached node.
+A 1-hop `--from Article --direction out --edge-scope walk`
+returns exactly the edges whose `from` is `Article`, never the
+sibling `inherits ApplicationRecord` of a reached node.
 
 ### Lower-level pipeline
 
-The pipeline `view` runs is also exposed as discrete subcommands
-when you want JSONL on disk or a pipeable text output:
+The pipeline `view` runs is also exposed as discrete
+subcommands when you want JSONL on disk or a pipeable text
+output:
 
 ```sh
-# Run `rigor check` and write edges JSONL (default: .rigor/module_graph/edges.jsonl)
+# Run `rigor check` and write edges JSONL
+# (default: .rigor/module_graph/edges.jsonl)
 bundle exec rigor-module-graph collect
 
 # Render the graph
@@ -215,18 +166,19 @@ bundle exec rigor-module-graph class-diagram .rigor/module_graph/edges.jsonl > c
 bundle exec rigor-module-graph class-diagram --no-private --no-attributes edges.jsonl
 ```
 
-`collect` shells out to `rigor check --format json --no-cache` and
-filters diagnostics on `source_family == "plugin.module-graph"` +
-`rule == "edge"`, so re-running is deterministic and there's no
-on-disk side-effect from the plugin itself.
+`collect` shells out to `rigor check --format json --no-cache`
+and filters diagnostics on
+`source_family == "plugin.module-graph"` + `rule == "edge"`,
+so re-running is deterministic and there's no on-disk
+side-effect from the plugin itself.
 
 `dot` / `mermaid` / `cycles` accept a file argument or read stdin.
 
 ### Filters and collapse
 
-All three reader subcommands accept the same filter flags. They
-prune the edge set before rendering / detecting; the JSONL on
-disk is untouched.
+All reader subcommands accept the same filter flags. They prune
+the edge set before rendering / detecting; the JSONL on disk is
+untouched.
 
 ```sh
 # Drop noisy const_ref / unresolved edges
@@ -235,7 +187,8 @@ bundle exec rigor-module-graph dot --kind inherits,include,prepend,extend edges.
 # Only the edges we're sure about
 bundle exec rigor-module-graph dot --confidence syntax,zeitwerk,rigor_type edges.jsonl
 
-# Fold every Billing::* node into one cluster (Dot subgraph_cluster_; Mermaid subgraph)
+# Fold every Billing::* node into one cluster
+# (Dot: subgraph_cluster_; Mermaid: subgraph)
 bundle exec rigor-module-graph dot     --collapse Billing,Auth edges.jsonl
 bundle exec rigor-module-graph mermaid --collapse Billing edges.jsonl
 
@@ -251,6 +204,46 @@ bundle exec rigor-module-graph mermaid --package-root /path/to/repo edges.jsonl
 # Cycles that stay within structural edges only
 bundle exec rigor-module-graph cycles --kind inherits,include edges.jsonl
 ```
+
+## Configuration
+
+`.rigor.yml` lives in the project root and is **required** —
+`rigor` reads it to discover this plugin. `rigor init` scaffolds
+a `.rigor.dist.yml` you can rename, or write it by hand. The
+two-line minimum from [Getting started](#getting-started) is
+enough; the full form below is for tuning.
+
+```yaml
+target_ruby: '4.0'
+paths:
+  - app
+  - lib
+plugins:
+  - gem: rigor-module-graph
+    config:
+      rails_zeitwerk: true
+      autoload_paths:
+        - app/models
+        - app/controllers
+        - app/services
+        - app/jobs
+        - lib
+      concern_dirs:
+        - app/models/concerns
+        - app/controllers/concerns
+      include_constant_refs: false
+```
+
+Every key shown is the default. Two switches worth knowing:
+
+- `include_constant_refs: true` — emit `const_ref` edges from
+  bare constant references inside method bodies. Off by default
+  because the volume of edges grows fast on a typical Rails app
+  and the noise can drown the structural picture.
+- `rails_zeitwerk: false` — keep every edge at
+  `confidence: "syntax"` and skip the path-based owner
+  inference. Useful when the project doesn't follow Zeitwerk's
+  autoload convention.
 
 ## Edge format
 
@@ -284,6 +277,10 @@ published to GitHub Pages on every push to `main`.
   built from `main`, mirrors the current source.
 - [API reference (RubyGems)](https://rubydoc.info/gems/rigor-module-graph) —
   the last released gem on rubydoc.info.
+- [How it works](docs/how-it-works.md) — the static-analysis
+  pipeline (Prism → node rules → confidence ladder → JSONL →
+  renderers), and why this is a nominal dependency graph and
+  not a call graph.
 - [Development guide](docs/development.md) — local setup, git
   hooks, CI / Release workflows, test suite layout.
 - [Design plan](docs/plan.md) — the decisions still
