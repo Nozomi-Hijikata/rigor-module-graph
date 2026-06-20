@@ -93,6 +93,51 @@ The `rubygems` GitHub Environment binding lets the gem's
 rubygems.org Trusted Publisher accept tokens from this workflow
 specifically.
 
+### Release flow
+
+Per-release sequence once Trusted Publisher is registered on
+the gem's rubygems.org settings (a one-time setup; see the
+[RubyGems trusted publishing guide](https://guides.rubygems.org/trusted-publishing/)).
+
+1. Bump `VERSION` in `lib/rigor/module_graph/version.rb`.
+2. Add a `## [X.Y.Z] — YYYY-MM-DD` section to
+   [`CHANGELOG.md`](../CHANGELOG.md), and the matching
+   `[X.Y.Z]: ...` compare link in the footer.
+3. Commit, tag, push:
+   ```sh
+   git commit -am "Release vX.Y.Z"
+   git tag vX.Y.Z
+   git push origin main --tags
+   ```
+4. Wait for CI green: `gh run watch`.
+5. Trigger the release workflow:
+   ```sh
+   # dry run first (build + test, no push)
+   gh workflow run release.yml --field dry_run=true
+
+   # then the real publish
+   gh workflow run release.yml --field dry_run=false
+   ```
+6. Verify: `gem info rigor-module-graph --remote`.
+
+What the workflow does in order: checkout → Ruby setup
+(bundler-cache off) → `bundle install` → CHANGELOG section
+check → `rake test` → `gem build` → `gem unpack` sanity check
+→ upload artefact (7-day retention) → `gem push` via OIDC.
+
+Failure modes worth knowing:
+
+| symptom | cause | fix |
+|---|---|---|
+| `CHANGELOG.md has no section for version X.Y.Z` | the gate at step 2 wasn't satisfied | add the heading, recommit, re-run |
+| `OIDC token verification failed` | trusted publisher missing or mismatched | check the four fields on rubygems.org match `nozomemein/rigor-module-graph` + `release.yml` + `rubygems` |
+| `Gem version X.Y.Z already exists` | the version was pushed before | bump to the next patch — rubygems.org refuses overwrites |
+
+The CLI fallback (`gem build` + `gem push`) stays available for
+the rare case the workflow itself breaks and a hotfix can't
+wait — `0.1.0` was published this way before Trusted Publisher
+was wired up.
+
 ### `purge-readme.yml` — push to `main`
 
 GitHub renders README images through
