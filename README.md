@@ -245,22 +245,6 @@ Every key shown is the default. Two switches worth knowing:
   inference. Useful when the project doesn't follow Zeitwerk's
   autoload convention.
 
-## Edge format
-
-Each edge in the JSONL file looks like:
-
-```json
-{"from":"Billing::Invoice","to":"ApplicationRecord","kind":"inherits","path":"app/models/billing/invoice.rb","line":2,"column":3,"confidence":"syntax"}
-```
-
-- `kind`: `inherits` / `include` / `prepend` / `extend` /
-  `const_ref` (the last one is reserved for Phase 2).
-- `confidence`: `syntax` / `zeitwerk` / `rigor_type` /
-  `unresolved`. MVP only emits `syntax`.
-
-The renderers dedup by `(from, to, kind, confidence)` so two
-`include Foo` on the same class across files collapse to one edge.
-
 ## Compatibility
 
 - Ruby `>= 4.0.0, < 4.1`

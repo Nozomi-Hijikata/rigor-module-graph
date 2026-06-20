@@ -56,6 +56,38 @@ leave each edge tagged `syntax` / `zeitwerk` / `rigor_type` /
 `unresolved` than to fake a `resolved` answer and silently get
 it wrong.
 
+## Edge format
+
+The pipeline lands every edge in `.rigor/module_graph/edges.jsonl`,
+one JSON object per line:
+
+```json
+{"from":"Billing::Invoice","to":"ApplicationRecord","kind":"inherits","path":"app/models/billing/invoice.rb","line":2,"column":3,"confidence":"syntax"}
+```
+
+Fields:
+
+- `from`, `to` — fully-qualified constant names. Absolute
+  (`::Foo`) and relative names collapse to the same node.
+- `kind` — one of `inherits` / `include` / `prepend` /
+  `extend` / `const_ref` / `association`. The last two carry
+  extra context: `const_ref` only appears when
+  `include_constant_refs: true`, and `association` is paired
+  with a cardinality (`one` / `many`) for Rails-style
+  `has_many` / `belongs_to` / `has_one` /
+  `has_and_belongs_to_many` calls.
+- `path`, `line`, `column` — extraction site.
+- `confidence` — `syntax` / `zeitwerk` / `rigor_type` /
+  `unresolved`. See [the confidence ladder](#the-pipeline)
+  above.
+- `raw` — present for `unresolved` edges; contains the source
+  slice we couldn't pin down, so a manual pass can sift
+  without re-parsing.
+
+The renderers dedupe by `(from, to, kind, confidence)`, so two
+`include Foo` declarations of the same class across files
+collapse to one logical edge.
+
 ## Why this design vs. the alternatives
 
 | tool | unit | technique |
