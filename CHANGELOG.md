@@ -19,60 +19,23 @@ Categories:
 
 ## [0.1.1] — 2026-06-20
 
-First Action-driven release. Code change is intentionally
-small; the bulk of this version is the post-0.1.0 release
-plumbing and a correctness fix the example surfaced.
+First Action-driven publish. The 0.1.0 release happened via the
+CLI fallback before the rubygems.org Trusted Publisher
+registration was in place; 0.1.1 is the first version to land
+through `release.yml`.
 
-### Added
-
-- `--version` / `-v` / `version` now prints
-  `rigor-module-graph X.Y.Z` (gem name + version), matching the
-  convention `bundler --version` and `gh --version` use, so the
-  output is self-identifying when pasted into a bug report.
-- Documentation set restructured: `docs/development.md`
-  (setup, hooks, workflows, release flow), `docs/plan.md`
-  (design decisions), `docs/limitation.md` (rough edges). RDoc
-  picks them all up via the `docs/*.md` glob; the README's
-  Documentation block is a single named-link index.
-
-### Fixed
-
-- `has_many :invoices` inside a namespaced class now resolves
-  the association target against the lexical namespace
-  (`Billing::Customer.has_many :invoices` → `Billing::Invoice`,
-  not the top-level `Invoice`). Matches Rails' `compute_type`
-  walk; the explicit `class_name:` override still wins.
+The user-visible code surface is intentionally tiny: the major
+correctness fix (namespaced association resolution), the
+Stats / Reachability / Edge perf rewrites, the SHA-pinned
+workflows, the docs split, and the MIT `LICENSE.txt` all
+already shipped in 0.1.0.
 
 ### Changed
 
-- Lefthook `rubocop` and `rigor` hooks run against the whole
-  project rather than staged files only, so the local hook
-  catches the same drift CI does.
-- All GitHub Actions workflow steps are SHA-pinned with the
-  human-readable tag in a trailing comment. `zizmor` enforces
-  the same policy in CI.
-- `actions/checkout` and `actions/upload-artifact` bumped to v7
-  for Node 24 native execution; the Node 20 deprecation banner
-  is gone.
-
-### Added (CI / Release / Docs)
-
-- `release.yml` — manual `workflow_dispatch` publish via
-  RubyGems Trusted Publishing (OIDC, no long-lived API key).
-  Gates on a `## [VERSION]` heading existing in `CHANGELOG.md`
-  before the gem build; a `dry_run` input runs the pipeline
-  without the final push.
-- `docs.yml` — RDoc deploy to GitHub Pages on every push to
-  `main`. Live at
-  <https://nozomemein.github.io/rigor-module-graph/>.
-- `purge-readme.yml` — push-time `PURGE` of
-  `camo.githubusercontent.com` so README image updates take
-  effect without waiting for the ~24h cache.
-- `ci.yml` `workflow-lint` job — zizmor over the workflow
-  files themselves, with `security-events: write` so findings
-  surface in the Security tab.
-- MIT `LICENSE.txt`. The `spec.license = "MIT"` line in the
-  gemspec finally has a matching file on disk.
+- `--version` / `-v` / `version` now prints
+  `rigor-module-graph X.Y.Z` instead of a bare `X.Y.Z`.
+  Matches the convention `bundler --version` and `gh --version`
+  use; bug reports pasted into chat are self-identifying.
 
 ## [0.1.0] — 2026-06-20
 
