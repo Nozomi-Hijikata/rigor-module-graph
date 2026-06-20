@@ -179,3 +179,81 @@ with their resolution. Two stay live:
   `confidence` ladder lets the consumer choose between recall
   (`unresolved` included) and precision
   (`--confidence syntax,zeitwerk,rigor_type`).
+
+## Roadmap
+
+Next phases, in rough priority order. Both are scoped as
+self-contained work — they don't unblock each other and can
+land independently.
+
+### Edge support — close the recall gap
+
+Today's `Analyzer` captures the structural mixin / inheritance
+/ association edges but misses several Rails patterns that
+contribute real architectural shape. Each missing edge type
+silently shifts the rendered graph away from how the code
+actually behaves at runtime, so accuracy improvements here
+beat any rendering polish.
+
+In rough effort / value order:
+
+- **`delegate :foo, to: :bar` / `Forwardable`** — extremely
+  common in Rails models and form objects. Same analyzer shape
+  as `association_edges`: pick up `delegate` call nodes, read
+  the `to:` option, emit a `delegate` edge. The `class_name:`
+  override pattern from associations applies unchanged.
+- **`ActiveSupport::Concern` blocks** — `included do; include
+  Foo; end` inside a Concern hides a mixin behind a block. Add
+  one `BlockNode` walk so `call_edges` recurses into
+  `included do …` / `class_methods do …` bodies and emits the
+  enclosed `include` edges against the concern's lexical
+  owner.
+- **DSL mixin recognition** — `has_secure_password`, `devise
+  :database_authenticatable`, `acts_as_*` and similar
+  effectively `include` known modules. Plumb a
+  `.rigor.yml` `dsl_mixins:` map (`{call_name =>
+  target_module}`) with a small set of defaults so the
+  Rails-shaped ones work out of the box and projects can
+  declare their own.
+- **`extend self` / `Module#class_eval(&block)`** — lower
+  frequency, lower value. Worth doing only after the above
+  three; tackle the same `BlockNode` walk as Concern blocks.
+
+Each new edge kind needs:
+1. An `Analyzer` rule + fixture covering the syntactic shape.
+2. A row in [the Edge format section in
+   how-it-works.md](how-it-works.md) so consumers know what
+   to filter on.
+3. An entry in the renderer's `KIND_STYLE` tables (Dot /
+   Mermaid / class diagram) so the new edge is visually
+   distinct from `include` / `inherits`.
+
+### 2D interactive viewer — break the rendering ceiling
+
+`view --output html` currently embeds the graph as Mermaid.
+Mermaid's `flowchart` parser starts failing somewhere above
+~800 nodes and is unusable above ~1500 — which is where
+real-world Rails apps land. The existing `--from` / `--depth`
+flags are escape hatches, not a fix.
+
+Replace the static Mermaid embed with a
+[Cytoscape.js](https://js.cytoscape.org/) (or vis.js) viewer
+that:
+
+- Renders 10k+ nodes without browser strain.
+- Live-filters by `kind` / `confidence` / name substring
+  without round-tripping through the CLI.
+- Click on a node copies its `path:line` to the clipboard or
+  opens it in the editor via the `file://` scheme.
+- Click on a namespace cluster collapses / expands it
+  in-place; the auto-collapse heuristic stays as the default
+  starting state.
+
+Non-3D deliberately. Depth perception costs readability with
+no compensating gain — see `2026-06-XX` discussion in the
+roadmap thread for the full reasoning.
+
+The CLI surface stays the same (`--output html`); only the
+embedded JavaScript changes. The current Mermaid path can stay
+behind `--output mermaid-html` for users who want the static
+artefact for docs.
