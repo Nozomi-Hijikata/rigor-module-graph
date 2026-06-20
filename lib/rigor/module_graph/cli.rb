@@ -98,11 +98,17 @@ module Rigor
         VALID_KINDS = Rigor::ModuleGraph::EDGE_KINDS
         VALID_CONFIDENCES = Rigor::ModuleGraph::EDGE_CONFIDENCES
         VALID_DIRECTIONS = Reachability::VALID_DIRECTIONS
+        VALID_EDGE_SCOPES = Reachability::VALID_EDGE_SCOPES
 
-        def apply_filters(edges, kinds:, confidences:, from: nil, depth: nil, direction: :both)
+        def apply_filters(edges, kinds:, confidences:, from: nil, depth: nil,
+                          direction: :both, edge_scope: :cluster)
           edges = edges.select { |e| kinds.include?(e.kind) } if kinds
           edges = edges.select { |e| confidences.include?(e.confidence) } if confidences
-          edges = Reachability.filter(edges, roots: from, depth: depth, direction: direction) if from && !from.empty?
+          if from && !from.empty?
+            edges = Reachability.filter(
+              edges, roots: from, depth: depth, direction: direction, edge_scope: edge_scope
+            )
+          end
           edges
         end
 
@@ -126,6 +132,13 @@ module Rigor
           opts.on("--direction DIR", VALID_DIRECTIONS.map(&:to_s),
                   "Direction to follow from --from roots (#{VALID_DIRECTIONS.join(", ")}; default: both)") do |dir|
             state[:direction] = dir.to_sym
+          end
+          opts.on("--edge-scope SCOPE", VALID_EDGE_SCOPES.map(&:to_s),
+                  "Edges to keep when --from is set: cluster keeps every edge whose " \
+                  "endpoints both fall in the reachable node set; walk keeps only " \
+                  "the edges the BFS actually traverses " \
+                  "(#{VALID_EDGE_SCOPES.join("|")}; default: cluster)") do |scope|
+            state[:edge_scope] = scope.to_sym
           end
         end
 
@@ -360,6 +373,7 @@ module Rigor
             from: nil,
             depth: nil,
             direction: :both,
+            edge_scope: :cluster,
             package: nil,
             include_methods: true,
             include_attributes: true,
@@ -379,7 +393,8 @@ module Rigor
             confidences: @options[:confidences],
             from: @options[:from],
             depth: @options[:depth],
-            direction: @options[:direction]
+            direction: @options[:direction],
+            edge_scope: @options[:edge_scope]
           )
           groups = package_groups(edges)
           collapse = groups ? [] : effective_collapse(edges)
@@ -643,7 +658,7 @@ module Rigor
           @stdin = stdin
           @state = {
             collapse: [], kinds: nil, confidences: nil,
-            from: nil, depth: nil, direction: :both,
+            from: nil, depth: nil, direction: :both, edge_scope: :cluster,
             package: nil
           }
         end
@@ -664,7 +679,8 @@ module Rigor
             confidences: @state[:confidences],
             from: @state[:from],
             depth: @state[:depth],
-            direction: @state[:direction]
+            direction: @state[:direction],
+            edge_scope: @state[:edge_scope]
           )
           groups = package_groups(edges)
           @stdout.print(rendered(edges, groups))
@@ -737,7 +753,7 @@ module Rigor
           @stdin = stdin
           @options = {
             kinds: nil, confidences: nil,
-            from: nil, depth: nil, direction: :both,
+            from: nil, depth: nil, direction: :both, edge_scope: :cluster,
             nodes_path: nil,
             include_methods: true,
             include_attributes: true,
@@ -762,7 +778,8 @@ module Rigor
             confidences: @options[:confidences],
             from: @options[:from],
             depth: @options[:depth],
-            direction: @options[:direction]
+            direction: @options[:direction],
+            edge_scope: @options[:edge_scope]
           )
 
           nodes_path = @options[:nodes_path] || default_nodes_for(edges_path)
@@ -845,7 +862,7 @@ module Rigor
           @stdin = stdin
           @state = {
             kinds: nil, confidences: nil,
-            from: nil, depth: nil, direction: :both,
+            from: nil, depth: nil, direction: :both, edge_scope: :cluster,
             grouping_depth: 1, format: "text", limit: nil
           }
         end
@@ -866,7 +883,8 @@ module Rigor
             confidences: @state[:confidences],
             from: @state[:from],
             depth: @state[:depth],
-            direction: @state[:direction]
+            direction: @state[:direction],
+            edge_scope: @state[:edge_scope]
           )
           metrics = Stats.compute(edges, depth: @state[:grouping_depth])
           metrics = metrics.first(@state[:limit]) if @state[:limit]
@@ -967,7 +985,8 @@ module Rigor
             confidences: @state[:confidences],
             from: @state[:from],
             depth: @state[:depth],
-            direction: @state[:direction]
+            direction: @state[:direction],
+            edge_scope: @state[:edge_scope]
           )
           cycles = CycleDetector.detect(edges)
           if cycles.empty?

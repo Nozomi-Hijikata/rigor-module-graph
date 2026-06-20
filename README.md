@@ -202,6 +202,17 @@ rigor-module-graph view --package-root /path/to/repo
 | `in`      | only "what depends on Article"         |
 | `both`    | both (default)                         |
 
+`--edge-scope` controls which edges survive once the BFS finishes:
+
+| edge-scope | meaning                                                    |
+|------------|------------------------------------------------------------|
+| `cluster`  | keep every edge whose endpoints both fall in the reachable set (default — good for "show me the Article neighbourhood as a cluster") |
+| `walk`     | keep only the edges the BFS actually traversed (good for "show me what depends on Article and nothing else"; drops sibling edges like `Foo inherits ApplicationRecord` that just happen to share a base class with reachable nodes) |
+
+A 1-hop `--from Article --direction out --edge-scope walk` returns
+exactly the edges whose `from` is `Article`, never the sibling
+`inherits ApplicationRecord` of a reached node.
+
 ### Lower-level pipeline
 
 The pipeline `view` runs is also exposed as discrete subcommands
