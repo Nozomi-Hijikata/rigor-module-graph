@@ -69,50 +69,22 @@ task :coverage do
   Rake::Task[:test].invoke
 end
 
+VENDOR_DIR = File.expand_path("lib/rigor/module_graph/templates/vendor", __dir__)
+VENDOR_MANIFEST_PATH = File.join(VENDOR_DIR, "MANIFEST.yml")
+VENDOR_CHECKSUMS_PATH = File.join(VENDOR_DIR, "CHECKSUMS")
+
 namespace :vendor do
+  desc "Cross-check each vendored asset against npm + GitHub + every CDN " \
+       "in MANIFEST.yml. Use on bump PRs; needs network."
+  task :audit do
+    require_relative "script/vendor_audit"
+    VendorAudit.run(manifest_path: VENDOR_MANIFEST_PATH, vendor_dir: VENDOR_DIR)
+  end
+
   desc "Verify sha256 of each vendored asset against vendor/CHECKSUMS"
   task :verify do
-    require "digest"
-
-    dir = File.expand_path("lib/rigor/module_graph/templates/vendor", __dir__)
-    checksums_path = File.join(dir, "CHECKSUMS")
-    unless File.exist?(checksums_path)
-      abort "vendor:verify: #{checksums_path} not found"
-    end
-
-    failures = []
-    seen = 0
-    File.foreach(checksums_path) do |line|
-      line = line.strip
-      next if line.empty? || line.start_with?("#")
-
-      expected, filename = line.split(/\s+/, 2)
-      unless expected && filename
-        failures << "  malformed line: #{line.inspect}"
-        next
-      end
-
-      path = File.join(dir, filename)
-      unless File.exist?(path)
-        failures << "  #{filename}: file missing"
-        next
-      end
-
-      actual = Digest::SHA256.file(path).hexdigest
-      if actual == expected
-        seen += 1
-      else
-        failures << "  #{filename}: expected #{expected}, got #{actual}"
-      end
-    end
-
-    if failures.empty?
-      puts "vendor:verify: #{seen} file(s) match CHECKSUMS"
-    else
-      puts "vendor:verify: mismatch detected"
-      failures.each { |line| puts line }
-      abort
-    end
+    require_relative "script/vendor_verify"
+    VendorVerify.run(checksums_path: VENDOR_CHECKSUMS_PATH, vendor_dir: VENDOR_DIR)
   end
 end
 
