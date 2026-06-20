@@ -1,18 +1,7 @@
 # https://docs.zizmor.sh/configuration/
 #
-# For a small Ruby gem, hash-pinning every action becomes a
-# Dependabot churn problem with little real-world security gain.
-# Drop the policy to `ref-pin`: actions must use a tag or branch
-# (not a mutable ref like @master), but a SHA isn't required.
-rules:
-  unpinned-uses:
-    config:
-      policies:
-        # First-party actions from trusted orgs — tag refs are
-        # plenty for a CI run with no production secrets.
-        actions/*: ref-pin
-        ruby/*: ref-pin
-        rubygems/*: ref-pin
-        zizmorcore/*: ref-pin
-        # Anything else still needs a SHA.
-        "*": hash-pin
+# We now SHA-pin every action in the workflows, so zizmor's
+# default `hash-pin` policy applies project-wide with no
+# overrides. Dependabot drives the bumps; the `# v<tag>` comment
+# next to each SHA keeps the human-readable version visible.
+rules: {}

@@ -58,36 +58,6 @@ each edge tagged `syntax` / `zeitwerk` / `rigor_type` /
 `unresolved` than to fake a `resolved` answer and silently get it
 wrong.
 
-## Status
-
-- **Phase 0 (spike)** ✅: validated the Rigor plugin API and
-  locked in the `:info` diagnostic output channel.
-- **Phase 1 (MVP)** ✅: `inherits` / `include` / `prepend` /
-  `extend` edges, DOT / Mermaid / cycles output, dedup,
-  Rigor-driven AST walk.
-- **Phase 2** ✅: Zeitwerk path → constant inference (elevates
-  confidence to `zeitwerk` when path agrees with lexical owner),
-  `const_ref` edges from method-body references behind an
-  `include_constant_refs` flag, namespace collapse in both Dot
-  and Mermaid.
-- **Phase 3** ✅: when a mixin argument is not a constant,
-  `scope.type_of` is consulted — a `Singleton[X]` carrier
-  promotes the edge to `confidence: "rigor_type"`. Failures
-  degrade to `confidence: "unresolved"` with the source slice
-  preserved in `raw`.
-- **Phase 4** ✅: per-namespace fan-in / fan-out report
-  (`stats` subcommand, text + JSON), Packwerk overlay
-  (`--package` / `--package-root`) so DOT/Mermaid/view cluster by
-  `packages/<name>/package.yml` boundaries instead of (or in
-  addition to) the Ruby namespace.
-- **Phase 5** ✅: UML-style class diagram output. `collect` also
-  writes `nodes.jsonl` (class / module declarations + methods +
-  attributes + Ruby visibility). `class-diagram` renders Mermaid
-  `classDiagram` syntax with member visibility glyphs and
-  cardinality on Rails associations (`has_many` / `belongs_to` /
-  `has_one` / `has_and_belongs_to_many`).
-- See `plan.md` for the full picture.
-
 ## Installation
 
 Via Bundler:

@@ -27,7 +27,7 @@ jobs:
     environment: rubygems     # use a protected environment if branch protection is set
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
 
@@ -36,7 +36,7 @@ jobs:
         # artefact, and a poisoned dependency in a restored cache
         # could end up in the gem we push. The install runs
         # once per release, which is cheap.
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@89f90524b88a01fe6e0b732220432cc6142926af # v1.313.0
         with:
           ruby-version: "4.0.0"
 
@@ -69,7 +69,7 @@ jobs:
         run: gem unpack pkg/rigor-module-graph.gem --target /tmp/gem-inspect && ls /tmp/gem-inspect/
 
       - name: Upload built gem as artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: gem
           path: pkg/*.gem
@@ -77,6 +77,6 @@ jobs:
 
       - name: Push to RubyGems (trusted publishing)
         if: ${{ !inputs.dry_run }}
-        uses: rubygems/release-gem@v1
+        uses: rubygems/release-gem@052cc82692552de3ef2b81fd670e41d13cba8092 # v1.4.0
         with:
           working-directory: pkg
