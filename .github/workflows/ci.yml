@@ -84,6 +84,25 @@ jobs:
         # the maintainer's local hooks were skipped.
         run: bundle exec rake vendor:verify
 
+      - name: Install Graphviz
+        # `examples/billing/build.rb` shells out to `dot -Tsvg`
+        # for the graph.svg artefact, so the drift check below
+        # needs the binary on PATH. Pinned to whatever
+        # `apt-get` ships — Graphviz's `dot` SVG output is
+        # stable across recent versions modulo the generator
+        # comment, which `check_billing_drift.rb` already
+        # normalises away.
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+
+      - name: Check examples/billing/ artefacts are up to date
+        # Regenerates the committed examples/billing/
+        # {index.html, graph.svg, class-diagram.html} via
+        # `build.rb` and fails if any drift from the committed
+        # copies. Catches the "edited build.rb / lib/ but
+        # forgot to refresh the example output" mistake before
+        # the PR lands.
+        run: bundle exec ruby script/check_billing_drift.rb
+
   workflow-lint:
     # Audits the GitHub Actions workflows themselves. zizmor flags
     # the common Action security pitfalls (mutable refs, missing
