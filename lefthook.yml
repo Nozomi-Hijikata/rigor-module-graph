@@ -50,7 +50,18 @@ pre-commit:
       run: bundle exec rake vendor:verify
 
 pre-push:
+  parallel: true
   commands:
     minitest:
       tags: test
       run: bundle exec rake test
+
+    billing-drift:
+      tags: docs
+      # Catches "edited lib/ or build.rb but forgot to commit
+      # the refreshed examples/billing/{index.html, graph.svg,
+      # class-diagram.html}" before push. CI runs the same
+      # script via .github/workflows/ci.yml; this is the local
+      # pre-flight so the same diff doesn't bounce through a
+      # red CI run.
+      run: bundle exec ruby script/check_billing_drift.rb

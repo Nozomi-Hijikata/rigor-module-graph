@@ -45,10 +45,19 @@ step "html viewer → index.html" do
 end
 
 step "graphviz svg → graph.svg" do
-  if `command -v dot`.strip == ""
-    warn "    skip (graphviz `dot` not on PATH)"
-  else
+  # `command` is a shell builtin on most systems, not an
+  # executable — Ruby's backticks for `command -v dot` fork-execs
+  # it directly and dies with ENOENT (CI surfaced this against
+  # an Ubuntu runner where dot was installed but the shell-only
+  # probe still aborted the build). Walk PATH ourselves; no
+  # shell involved.
+  on_path = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).any? do |dir|
+    File.executable?(File.join(dir, "dot"))
+  end
+  if on_path
     view!("svg", save: "graph.svg")
+  else
+    warn "    skip (graphviz `dot` not on PATH)"
   end
 end
 
