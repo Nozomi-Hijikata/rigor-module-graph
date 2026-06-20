@@ -15,19 +15,23 @@
   <h1><%= ERB::Util.html_escape(title) %></h1>
   <% if subtitle %><p class="subtitle"><%= ERB::Util.html_escape(subtitle) %></p><% end %>
   <div id="controls">
-    <fieldset id="filter-kind"><legend>kind</legend></fieldset>
-    <fieldset id="filter-confidence"><legend>confidence</legend></fieldset>
-    <input id="search" type="search" placeholder="search nodes...">
-    <label for="layout-pick">layout</label>
-    <select id="layout-pick">
-      <option value="cose" selected>cose (force-directed)</option>
-      <option value="breadthfirst">breadthfirst (hierarchical)</option>
-      <option value="concentric">concentric (by degree)</option>
-      <option value="circle">circle</option>
-      <option value="grid">grid</option>
-    </select>
-    <button id="fit" type="button">fit</button>
-    <span id="counts"></span>
+    <div class="controls-row">
+      <fieldset id="filter-kind"><legend>kind</legend></fieldset>
+      <fieldset id="filter-confidence"><legend>confidence</legend></fieldset>
+      <span id="counts"></span>
+    </div>
+    <div class="controls-row">
+      <input id="search" type="search" placeholder="search nodes...">
+      <label for="layout-pick">layout</label>
+      <select id="layout-pick">
+        <option value="cose" selected>cose (force-directed)</option>
+        <option value="breadthfirst">breadthfirst (hierarchical)</option>
+        <option value="concentric">concentric (by degree)</option>
+        <option value="circle">circle</option>
+        <option value="grid">grid</option>
+      </select>
+      <button id="fit" type="button">fit</button>
+    </div>
   </div>
 </header>
 <main>

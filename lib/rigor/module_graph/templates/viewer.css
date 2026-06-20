@@ -17,7 +17,17 @@ header {
 header h1 { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 600; }
 header .subtitle { margin: 0 0 0.5rem; color: #64748b; font-size: 0.85rem; }
 
+/* The header carries two rows of controls.  Row 1 holds the
+   filter fieldsets (kind / confidence) + the live counts;
+   row 2 holds search / layout / fit.  Stacking by intent
+   keeps cramped one-line wrapping from putting widgets on
+   awkward boundaries. */
 #controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+#controls .controls-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;

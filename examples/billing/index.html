@@ -24,7 +24,17 @@ header {
 header h1 { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 600; }
 header .subtitle { margin: 0 0 0.5rem; color: #64748b; font-size: 0.85rem; }
 
+/* The header carries two rows of controls.  Row 1 holds the
+   filter fieldsets (kind / confidence) + the live counts;
+   row 2 holds search / layout / fit.  Stacking by intent
+   keeps cramped one-line wrapping from putting widgets on
+   awkward boundaries. */
 #controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+#controls .controls-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -101,19 +111,23 @@ main { flex: 1 1 auto; min-height: 0; }
   <h1>rigor-module-graph: billing</h1>
   <p class="subtitle">18 edge(s) from /Users/nozo/dev/rigor-graphviz/examples/billing · collapsed: Billing</p>
   <div id="controls">
-    <fieldset id="filter-kind"><legend>kind</legend></fieldset>
-    <fieldset id="filter-confidence"><legend>confidence</legend></fieldset>
-    <input id="search" type="search" placeholder="search nodes...">
-    <label for="layout-pick">layout</label>
-    <select id="layout-pick">
-      <option value="cose" selected>cose (force-directed)</option>
-      <option value="breadthfirst">breadthfirst (hierarchical)</option>
-      <option value="concentric">concentric (by degree)</option>
-      <option value="circle">circle</option>
-      <option value="grid">grid</option>
-    </select>
-    <button id="fit" type="button">fit</button>
-    <span id="counts"></span>
+    <div class="controls-row">
+      <fieldset id="filter-kind"><legend>kind</legend></fieldset>
+      <fieldset id="filter-confidence"><legend>confidence</legend></fieldset>
+      <span id="counts"></span>
+    </div>
+    <div class="controls-row">
+      <input id="search" type="search" placeholder="search nodes...">
+      <label for="layout-pick">layout</label>
+      <select id="layout-pick">
+        <option value="cose" selected>cose (force-directed)</option>
+        <option value="breadthfirst">breadthfirst (hierarchical)</option>
+        <option value="concentric">concentric (by degree)</option>
+        <option value="circle">circle</option>
+        <option value="grid">grid</option>
+      </select>
+      <button id="fit" type="button">fit</button>
+    </div>
   </div>
 </header>
 <main>
