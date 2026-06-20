@@ -75,6 +75,15 @@ jobs:
         # away from test_helper's SimpleCov DSL.
         run: bundle exec rigor check lib
 
+      - name: Verify vendored asset checksums
+        # Re-computes sha256 for every file pinned in
+        # `lib/**/templates/vendor/CHECKSUMS` and fails on
+        # mismatch. The pre-commit hook runs the same task
+        # locally; this step is the independent CI enforcement
+        # so an unaudited bump cannot land on `main` even if
+        # the maintainer's local hooks were skipped.
+        run: bundle exec rake vendor:verify
+
   workflow-lint:
     # Audits the GitHub Actions workflows themselves. zizmor flags
     # the common Action security pitfalls (mutable refs, missing
