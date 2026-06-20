@@ -80,6 +80,15 @@ jobs:
     # the common Action security pitfalls (mutable refs, missing
     # persist-credentials, overbroad permissions, ...).
     runs-on: ubuntu-latest
+    # zizmor-action internally calls `github/codeql-action/
+    # upload-sarif` to surface findings in the repo's Security
+    # tab. Without `security-events: write` that step fails with
+    # "Resource not accessible by integration" and the whole job
+    # exits non-zero even though zizmor itself reported no
+    # findings.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
