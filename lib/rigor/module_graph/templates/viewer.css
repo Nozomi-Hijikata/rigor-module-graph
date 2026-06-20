@@ -17,7 +17,17 @@ header {
 header h1 { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 600; }
 header .subtitle { margin: 0 0 0.5rem; color: #64748b; font-size: 0.85rem; }
 
+/* The header carries two rows of controls.  Row 1 holds the
+   filter fieldsets (kind / confidence) + the live counts;
+   row 2 holds search / layout / fit.  Stacking by intent
+   keeps cramped one-line wrapping from putting widgets on
+   awkward boundaries. */
 #controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+#controls .controls-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -51,6 +61,32 @@ fieldset label input { margin-right: 0.15rem; }
   border-radius: 3px;
   font-size: 0.8rem;
   cursor: pointer;
+}
+/* The layout picker matches `#search` / `#fit` for visual
+   weight: same border, radius, font size; no native browser
+   chrome. The label sits next to the select like a small
+   muted caption so it reads as one paired control rather
+   than two siblings competing for attention. */
+#controls > label[for="layout-pick"] {
+  font-size: 0.7rem;
+  color: #64748b;
+  margin-right: -0.5rem;
+  user-select: none;
+}
+#layout-pick {
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  /* Custom caret so cross-browser look matches `#fit`. */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='%2364748b'%3E%3Cpath d='M0 0l6 8 6-8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 0.6rem;
 }
 #counts {
   color: #64748b;

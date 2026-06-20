@@ -17,6 +17,23 @@ Categories:
 
 ## [Unreleased]
 
+### Added
+
+- **Namespace grouping in the interactive viewer.** `view
+  --output html` honours `--collapse` / `--package` / the
+  auto-collapse heuristic by wrapping matching nodes in
+  Cytoscape compound nodes. Child labels drop the namespace
+  prefix, the parent compound carries the namespace name —
+  same visual contract as the Mermaid `subgraph` and
+  Graphviz `cluster_*` renderers. Empty compounds auto-hide
+  when every child is filtered out.
+- **Layout switcher.** Dropdown in the viewer header lets
+  you pick between Cytoscape's built-in layouts: cose
+  (force-directed, the default and the only one that
+  preserves compound boundaries cleanly), breadthfirst
+  (hierarchical), concentric (rings by node degree), circle,
+  and grid. Re-runs the layout in place, no page reload.
+
 ## [0.1.3] — 2026-06-20
 
 The first release that pairs the published gem with the

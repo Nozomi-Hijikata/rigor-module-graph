@@ -39,11 +39,22 @@ module Rigor
         # @param open_with [Symbol, nil] when `:vscode`, node click
         #   opens `vscode://file/<path>:<line>` instead of writing
         #   to clipboard.
+        # @param collapse [Array<String>] namespace prefixes to
+        #   wrap as Cytoscape compound nodes. Same shape as the
+        #   list `Mermaid.render` / `Dot.render` accept. Used by
+        #   the auto-collapse heuristic in `View`.
+        # @param groups [Hash{String=>String}, nil] explicit
+        #   node-name → cluster-label mapping. Takes precedence
+        #   over `collapse` when given. Drives the `--package`
+        #   Packwerk overlay.
         # @return [String] complete HTML document
-        def render(edges:, nodes:, title:, subtitle: nil, path_mode: :relative, open_with: nil)
+        def render(edges:, nodes:, title:, subtitle: nil,
+                   path_mode: :relative, open_with: nil,
+                   collapse: [], groups: nil)
           data = build_data(
             edges: edges, nodes: nodes,
-            path_mode: path_mode, open_with: open_with
+            path_mode: path_mode, open_with: open_with,
+            collapse: collapse, groups: groups
           )
           template = ERB.new(File.read(TEMPLATE_PATH), trim_mode: "-")
           template.result_with_hash(
@@ -59,37 +70,30 @@ module Rigor
         # Builds the `{nodes:, edges:, options:}` payload the
         # inline init JS reads from
         # `<script type="application/json" id="rmg-data">`.
-        def build_data(edges:, nodes:, path_mode:, open_with:)
-          node_meta = {}
-          nodes.each do |node|
-            next unless CONSTANT_KINDS.include?(node.kind)
+        def build_data(edges:, nodes:, path_mode:, open_with:,
+                       collapse: [], groups: nil)
+          # Decide each node's parent compound (if any) before
+          # walking the node / edge sets, so member nodes can
+          # have their visible label shortened to drop the
+          # namespace prefix.
+          parent_for = compute_parents(edges, nodes, collapse, groups)
 
-            key = fully_qualified(node)
-            # First definition wins; class re-opens still resolve
-            # to one Cytoscape node, matching the dedup contract
-            # in `Edge#dedup_key`.
-            node_meta[key] ||= {
-              # Cytoscape resolves `edge.source` / `edge.target`
-              # against `node.data.id`, so the constant name has
-              # to be the id (not just a display field).
-              id: key,
-              name: key,
-              kind: node.kind,
-              path: path_for(node.path, path_mode),
-              line: node.line
-            }
-          end
+          node_meta = build_node_meta(nodes, parent_for, path_mode)
+          add_external_endpoints(node_meta, edges, parent_for)
 
-          # Every edge endpoint becomes a node, even when the
-          # constant has no definition in the analysed paths
-          # (e.g. `ApplicationRecord` from a Rails gem). These
-          # get the `external` kind so the styling can dim them.
-          edges.flat_map { |e| [e.from, e.to] }.uniq.each do |name|
-            node_meta[name] ||= { id: name, name: name, kind: "external" }
+          # Cytoscape treats any node referenced as a `parent` as
+          # a compound (group) automatically. We still emit an
+          # explicit entry per compound so it gets a label and
+          # `kind: "compound"` styling — and so the JSON dataset
+          # is self-contained for debugging.
+          compound_nodes = parent_for.values.uniq.compact.map do |label|
+            { data: { id: label, name: label, kind: "compound" } }
           end
 
           {
-            nodes: node_meta.values.map { |n| { data: n } },
+            # Compound nodes first so Cytoscape sees the parents
+            # before their children during element registration.
+            nodes: compound_nodes + node_meta.values.map { |n| { data: n } },
             edges: edges.each_with_index.map do |edge, i|
               {
                 data: {
@@ -103,6 +107,89 @@ module Rigor
             end,
             options: { open_with: open_with&.to_s }
           }
+        end
+
+        # Resolves the cluster (compound-node id) each node sits
+        # in. `groups:` wins outright when given (Packwerk
+        # overlay); otherwise `collapse:` prefix-matches against
+        # every fully-qualified name, longest prefix first.
+        def compute_parents(edges, nodes, collapse, groups)
+          if groups && !groups.empty?
+            groups.dup
+          else
+            prefixes = Array(collapse).map(&:to_s).reject(&:empty?).sort_by { |p| -p.length }
+            return {} if prefixes.empty?
+
+            all_names = collect_names(edges, nodes)
+            parent_for = {}
+            all_names.each do |name|
+              match = prefixes.find { |p| name.start_with?("#{p}::") }
+              parent_for[name] = match if match
+            end
+            parent_for
+          end
+        end
+
+        def collect_names(edges, nodes)
+          (edges.flat_map { |e| [e.from, e.to] } +
+           nodes.flat_map { |n| CONSTANT_KINDS.include?(n.kind) ? [fully_qualified(n)] : [] }).uniq
+        end
+
+        def build_node_meta(nodes, parent_for, path_mode)
+          meta = {}
+          nodes.each do |node|
+            next unless CONSTANT_KINDS.include?(node.kind)
+
+            key = fully_qualified(node)
+            # First definition wins; class re-opens still resolve
+            # to one Cytoscape node, matching the dedup contract
+            # in `Edge#dedup_key`.
+            meta[key] ||= node_data(
+              id: key, kind: node.kind,
+              path: path_for(node.path, path_mode), line: node.line,
+              parent_for: parent_for
+            )
+          end
+          meta
+        end
+
+        # Every edge endpoint becomes a node, even when the
+        # constant has no definition in the analysed paths
+        # (e.g. `ApplicationRecord` from a Rails gem). External
+        # endpoints are marked `kind: "external"` so the styling
+        # can dim them.
+        def add_external_endpoints(meta, edges, parent_for)
+          edges.flat_map { |e| [e.from, e.to] }.uniq.each do |name|
+            meta[name] ||= node_data(
+              id: name, kind: "external", path: nil, line: nil,
+              parent_for: parent_for
+            )
+          end
+        end
+
+        # Common shape: id (full constant name; Cytoscape uses
+        # this to resolve edge endpoints), name (visible label,
+        # stripped of the compound's namespace prefix), parent
+        # (compound id, set only when grouped).
+        def node_data(id:, kind:, path:, line:, parent_for:)
+          parent = parent_for[id]
+          data = {
+            id: id,
+            name: parent ? short_label(id, parent) : id,
+            kind: kind,
+            path: path,
+            line: line
+          }
+          data[:parent] = parent if parent
+          data
+        end
+
+        # Drop the `parent::` prefix from the visible label —
+        # `Billing::Customer` inside a "Billing" compound shows
+        # as just "Customer", matching how the Mermaid /
+        # Graphviz cluster renderers already strip the prefix.
+        def short_label(id, parent)
+          id.sub(/\A#{Regexp.escape(parent)}::/, "")
         end
 
         def fully_qualified(node)

@@ -484,7 +484,9 @@ module Rigor
               title: "rigor-module-graph: #{File.basename(Dir.pwd)}",
               subtitle: render_subtitle(edges, collapse, groups),
               path_mode: @options[:path_mode],
-              open_with: @options[:open_with]
+              open_with: @options[:open_with],
+              collapse: collapse,
+              groups: groups
             )
             [html, false]
           when "mermaid-html"
