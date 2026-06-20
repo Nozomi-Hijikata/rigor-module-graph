@@ -17,6 +17,13 @@ Categories:
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-06-20
+
+The first release that pairs the published gem with the
+[interactive viewer](docs/how-it-works.md) the README has been
+showcasing, plus the supply-chain hardening that justifies
+shipping a vendored third-party JS file inside the gem.
+
 ### Added
 
 - **Interactive `view --output html` viewer.** Replaces the
@@ -58,6 +65,10 @@ Categories:
   freshly-built artefacts and the committed copies.
   Normalises the graphviz version banner so the runner's
   apt-shipped version doesn't trigger a false positive.
+- New `docs/security.md` consolidates the supply-chain story
+  (Bundler / Dependabot cooldown, vendored-JS sha256 +
+  4-source audit, action SHA pinning, OIDC trusted
+  publishing).
 
 ### Changed
 
@@ -74,6 +85,14 @@ Categories:
   the silent inconsistency left when the README rendering
   fix landed in [0.1.2]. No code change; `rake rdoc` emits no
   warnings under 7.x.
+- README hero leads with the Cytoscape viewer screenshot
+  (the default output) and the Graphviz SVG follows.
+  `examples/billing/preview.png` resized from 1280x860 to
+  720x483 so it fits the RDoc darkfish content pane on the
+  GitHub Pages site without overflow.
+- README Documentation index re-ordered along the natural
+  reading flow: how-it-works → security → limitation →
+  development → plan.
 
 ## [0.1.2] — 2026-06-20
 
@@ -231,7 +250,8 @@ spike through Phase 5 (UML class diagram).
   baseline and YJIT, and trailed baseline on Stats and
   CycleDetector — recommendation stays YJIT.
 
-[Unreleased]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nozomemein/rigor-module-graph/releases/tag/v0.1.0
