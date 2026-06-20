@@ -1,30 +1,59 @@
-# Vendored third-party assets.
+# Vendored third-party assets — sha256 manifest.
 #
-# Each row pins a file in this directory to a specific upstream
-# release plus a sha256 of the bytes that release ships. The
-# checksum is what `rake vendor:verify` re-computes and fails
-# on mismatch — a CI break here means "the vendored file on
-# disk no longer matches what we said it does", which is the
-# signal we want.
+# This file is the local integrity gate: `rake vendor:verify`
+# re-computes sha256 for every row below and aborts on
+# mismatch. Pre-commit and CI both run it. Per-file
+# provenance (upstream URLs, npm `dist.integrity`, license,
+# release date) lives next door in `MANIFEST.yml`; the audit
+# task reads that.
 #
-# Bumping a vendored dependency:
-#   1. Download the new release from upstream + at least one
-#      mirror (CDN or GitHub release asset).
-#   2. Cross-check sha256 across sources before trusting the
-#      bytes.
-#   3. Update this file (filename, version, source URL, sha256).
-#   4. Open a manual PR — Dependabot is configured to ignore
-#      this directory.
+# What this catches: bytes on disk no longer matching what we
+# committed.
+# What this does NOT catch on its own: bytes that were
+# silently wrong at commit time (TOFU). For that, the bump
+# SOP below requires `rake vendor:audit`, which cross-checks
+# against four independent sources (npm tarball + npm
+# `dist.integrity` + GitHub raw + every CDN listed in
+# MANIFEST).
+#
+# ---
+# Bumping a vendored asset (SOP):
+#
+#   1. Edit `MANIFEST.yml`: bump `release_tag`, `release_date`,
+#      `npm.version`, `tarball_url`, `github_raw_url`, and
+#      each CDN URL to the new version.
+#   2. Look up the new `npm.integrity` from
+#      `https://registry.npmjs.org/<package>/<version>`
+#      (`dist.integrity` field) and paste it into
+#      `MANIFEST.yml`.
+#   3. Download the new asset locally; replace the file under
+#      `vendor/`.
+#   4. `shasum -a 256 vendor/<filename>` → update the sha256
+#      row in this file.
+#   5. `bundle exec rake vendor:audit` — this fetches the new
+#      version from npm + GitHub + every CDN and asserts they
+#      all agree with the recorded sha256, and that the npm
+#      tarball's sha512 matches the recorded `dist.integrity`.
+#      Any mismatch means at least one source disagrees — do
+#      NOT proceed.
+#   6. Update `last_audited:` in `MANIFEST.yml` to today's date.
+#   7. Open a manual PR. Reviewer checks:
+#      - the diff touches only `vendor/<filename>`,
+#        `CHECKSUMS`, and `MANIFEST.yml`
+#      - release tag / date / license / source URLs match the
+#        new version
+#      - CI `vendor:verify` step passes
+#      - the audit step output was attached to the PR (paste
+#        `rake vendor:audit` output into the PR description)
+#      - `npm audit signatures cytoscape@<new>` clean (when
+#        npm CLI is available locally)
 #
 # Format: sha256 (64 hex chars)  two spaces  filename
 # Lines starting with `#` and blank lines are ignored.
 #
 # ---
 # cytoscape.min.js
-#   upstream:  https://github.com/cytoscape/cytoscape.js
-#   release:   v3.34.0 (2026-06-02)
-#   license:   MIT (https://github.com/cytoscape/cytoscape.js/blob/master/LICENSE)
-#   sources:   https://cdn.jsdelivr.net/npm/cytoscape@3.34.0/dist/cytoscape.min.js
-#              https://unpkg.com/cytoscape@3.34.0/dist/cytoscape.min.js
-#   verified:  2026-06-20 (both sources returned byte-identical content)
+#   See MANIFEST.yml for the full provenance.
+#   release:  v3.34.0 (2026-06-02), MIT
+#   npm:      cytoscape@3.34.0
 9c2a3bf2592e0b14a1f7bec07c03a54f16dedf32af9cd0af155c716aa6c87bc3  cytoscape.min.js
