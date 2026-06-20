@@ -2,23 +2,33 @@ version: 2
 updates:
   # Ruby gems via Bundler. Dependabot opens PRs on minor /
   # patch bumps. The `cooldown` setting in `.bundle/config`
-  # already gates against zero-day publish, so this layer is
-  # additive: it surfaces version drift even when local
-  # `bundle update` runs are infrequent.
+  # already gates against zero-day publish at install time,
+  # so this layer is additive: it surfaces version drift even
+  # when local `bundle update` runs are infrequent. The
+  # `cooldown:` block below applies the same 7-day window on
+  # the Dependabot side — a yanked-within-hours malicious
+  # version never gets proposed as a PR in the first place.
   - package-ecosystem: bundler
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   # GitHub Actions. Bumps the SHA pins our zizmor policy
   # already enforces; the resulting PR includes the new tag in
   # the trailing comment so the diff is reviewable in one pass.
+  # Same 7-day cooldown rationale as Bundler — a compromised
+  # action published and yanked within the window never
+  # surfaces as a bump suggestion.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   # `lib/**/templates/vendor/` is intentionally NOT covered by
   # any Dependabot ecosystem. Vendored third-party JS (e.g.
