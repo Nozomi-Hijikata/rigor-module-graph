@@ -310,9 +310,7 @@ Three GitHub Actions workflows under `.github/workflows/`:
 - **`docs.yml`** — runs on push to `main`. Generates RDoc via
   `bundle exec rake rdoc` and deploys `doc/` to GitHub Pages.
   The live site is at
-  <https://nozomemein.github.io/rigor-module-graph/>. Enable
-  GitHub Pages with the "GitHub Actions" source before the
-  first run.
+  <https://nozomemein.github.io/rigor-module-graph/>.
 - **`release.yml`** — manual trigger (`workflow_dispatch`).
   Builds the gem, runs tests, and pushes to RubyGems via
   [trusted publishing](https://guides.rubygems.org/trusted-publishing/)
