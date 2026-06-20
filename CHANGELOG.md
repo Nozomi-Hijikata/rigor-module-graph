@@ -114,5 +114,5 @@ spike through Phase 5 (UML class diagram).
   baseline and YJIT, and trailed baseline on Stats and
   CycleDetector — recommendation stays YJIT.
 
-[Unreleased]: https://github.com/Nozomi-Hijikata/rigor-graphviz/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Nozomi-Hijikata/rigor-graphviz/releases/tag/v0.1.0
+[Unreleased]: https://github.com/nozomemein/rigor-module-graph/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/nozomemein/rigor-module-graph/releases/tag/v0.1.0

@@ -24,8 +24,10 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
   spec.metadata = {
     "documentation_uri" => "https://rubydoc.info/gems/rigor-module-graph",
-    "changelog_uri" => "https://github.com/Nozomi-Hijikata/rigor-graphviz/blob/main/CHANGELOG.md",
-    "source_code_uri" => "https://github.com/Nozomi-Hijikata/rigor-graphviz",
+    "changelog_uri" => "https://github.com/nozomemein/rigor-module-graph/blob/main/CHANGELOG.md",
+    "source_code_uri" => "https://github.com/nozomemein/rigor-module-graph",
+    "bug_tracker_uri" => "https://github.com/nozomemein/rigor-module-graph/issues",
+    "homepage_uri" => "https://github.com/nozomemein/rigor-module-graph",
     "rubygems_mfa_required" => "true"
   }
   spec.rdoc_options = ["--main", "README.md", "--markup", "rdoc"]
