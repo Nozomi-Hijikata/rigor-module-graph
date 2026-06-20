@@ -111,54 +111,60 @@ specifically.
 Per-release sequence once Trusted Publisher is registered on
 the gem's rubygems.org settings (a one-time setup; see the
 [RubyGems trusted publishing guide](https://guides.rubygems.org/trusted-publishing/)).
+The maintainer pushes `main`; the workflow handles tag, gem
+push, and GitHub Release.
 
 1. Bump `VERSION` in `lib/rigor/module_graph/version.rb`.
 2. Add a `## [X.Y.Z] — YYYY-MM-DD` section to
    [`CHANGELOG.md`](../CHANGELOG.md), and the matching
    `[X.Y.Z]: ...` compare link in the footer.
-3. Commit, tag, push:
+3. Commit and push `main`:
    ```sh
    git commit -am "Release vX.Y.Z"
-   git tag vX.Y.Z
-   git push origin main --tags
+   git push origin main
    ```
+   No `git tag` is needed — `Bundler::GemHelper#tag_version`
+   inside `rake release` creates the `vX.Y.Z` tag at the
+   commit the workflow builds and pushes it for us.
 4. Wait for CI green: `gh run watch`.
 5. Trigger the release workflow:
    ```sh
-   # dry run first (build + test, no push)
+   # dry run first (build + test, no push, no tag)
    gh workflow run release.yml --field dry_run=true
 
    # then the real publish
    gh workflow run release.yml --field dry_run=false
    ```
-6. Verify: `gem info rigor-module-graph --remote`.
+6. Verify: `gem info rigor-module-graph --remote` lists the
+   new version; `gh release view vX.Y.Z` shows the release
+   with the reflowed CHANGELOG body and `.gem` attached.
 
 What the workflow does in order: checkout (full tag history) →
 Ruby setup (bundler-cache off) → `bundle install` → preflight
-(CHANGELOG `## [X.Y.Z]` exists, `vX.Y.Z` tag exists locally,
-tag points at HEAD) → extract the CHANGELOG slice into the
-GitHub Release notes file → `rake test` → `rake build` (sanity
-check) → unpack the gem → upload as artefact (7 days) →
-`rake release` via `rubygems/release-gem` (OIDC, no API key) →
-`gh release create` attaches the gem to the GitHub Release.
+(CHANGELOG `## [X.Y.Z]` exists) → extract the CHANGELOG slice
+into the GitHub Release notes file → `rake test` → `rake build`
+(sanity check) → unpack the gem → upload as artefact (7 days)
+→ `rake release` via `rubygems/release-gem` (OIDC, no API key)
+→ `gh release create` attaches the gem to the GitHub Release.
 
 The `Bundler::GemHelper` flow `rake release` runs under the
-hood: build → guard_clean → tag push (no-op when already on
-origin) → `gem push`. We rely on the Rakefile's
-`require "bundler/gem_tasks"` for those task definitions, which
-is the convention `rubygems/release-gem` expects.
+hood: build → guard_clean → tag at HEAD (skipped if
+`already_tagged?`) → `git push origin refs/heads/main` and
+`git push origin refs/tags/vX.Y.Z` → `gem push`. We rely on
+the Rakefile's `require "bundler/gem_tasks"` for those task
+definitions, which is the convention `rubygems/release-gem`
+expects.
 
 Failure modes worth knowing:
 
 | symptom | cause | fix |
 |---|---|---|
-| `CHANGELOG.md has no section for version X.Y.Z` | preflight gate | add the heading, recommit, re-run |
-| `Tag vX.Y.Z does not exist` | tag wasn't pushed | `git tag vX.Y.Z && git push --tags` |
-| `Tag vX.Y.Z points at <sha>, but this run builds <sha>` | tagged an older commit, then bumped VERSION | `git tag -f vX.Y.Z && git push --tags --force`, or revert HEAD |
+| `CHANGELOG.md has no section for version X.Y.Z` | preflight gate | add the heading, recommit, re-push, re-run the workflow |
 | `Extracted release notes are empty` | CHANGELOG section is whitespace-only | add real content under the `## [X.Y.Z]` heading |
 | `OIDC token verification failed` | trusted publisher missing / mismatched | check rubygems.org Trusted Publisher fields against `nozomemein/rigor-module-graph` + `release.yml` + `rubygems` |
 | `Gem version X.Y.Z already exists` | the version was pushed before | bump to the next patch — rubygems.org refuses overwrites |
-| `gh release create` fails after `gem push` succeeds | rare; `gh` API hiccup | run `gh release create vX.Y.Z --notes-file <(awk ...) pkg/*.gem` manually with the same extraction snippet from `release.yml` |
+| `Tag vX.Y.Z already exists` (informational) | the tag was created manually before the workflow ran | no-op; `already_tagged?` skips tag creation and the workflow keeps going |
+| `gh release create` fails after `gem push` succeeds | rare; `gh` API hiccup | run `gh release create vX.Y.Z --notes-file <(ruby script/changelog_extract.rb --version X.Y.Z CHANGELOG.md) pkg/*.gem` manually |
 
 The CLI fallback (`gem build` + `gem push`) stays available for
 the rare case the workflow itself breaks and a hotfix can't

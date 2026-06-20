@@ -51,16 +51,17 @@ jobs:
       - name: Bundle install
         run: bundle install --jobs 4 --retry 3
 
-      - name: Resolve version + verify CHANGELOG + tag
+      - name: Resolve version + verify CHANGELOG
         id: meta
-        # Three preflight checks for the three things that are
-        # easy to forget and expensive to recover from after
-        # `gem push`:
-        # - CHANGELOG.md has a `## [X.Y.Z]` section
-        # - `vX.Y.Z` tag exists locally (= was pushed)
-        # - the tag points at the commit we're actually building
-        #   (catches "tagged on an older commit but bumped VERSION
-        #   later" mistakes)
+        # The only thing that's truly easy to forget and
+        # expensive to recover from after `gem push`: a missing
+        # CHANGELOG section for this version. The git tag is
+        # handled by `Bundler::GemHelper#tag_version` inside
+        # `rake release` later in this workflow — it creates the
+        # tag at HEAD when missing, no-ops when already present —
+        # so we don't preflight it here. The maintainer's hand
+        # only touches `git push origin main`; the tag travels
+        # back from this run.
         run: |
           set -euo pipefail
           version="$(ruby -r ./lib/rigor/module_graph/version -e 'print Rigor::ModuleGraph::VERSION')"
@@ -72,20 +73,7 @@ jobs:
             echo "Add a '## [${version}] — YYYY-MM-DD' heading before releasing."
             exit 1
           fi
-          if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            echo "::error::Tag ${tag} does not exist."
-            echo "Run \`git tag ${tag} && git push --tags\` before triggering this workflow."
-            exit 1
-          fi
-          tag_commit="$(git rev-list -n 1 "${tag}")"
-          head_commit="$(git rev-parse HEAD)"
-          if [ "${tag_commit}" != "${head_commit}" ]; then
-            echo "::error::Tag ${tag} points at ${tag_commit}, but this run builds ${head_commit}."
-            echo "Move the tag (\`git tag -f ${tag}\`) or revert HEAD before releasing."
-            exit 1
-          fi
-
-          echo "CHANGELOG, tag ${tag}, and HEAD all aligned at ${head_commit}."
+          echo "CHANGELOG has a section for ${version}; building from $(git rev-parse HEAD)."
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
