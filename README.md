@@ -5,11 +5,16 @@
 [![CI](https://github.com/nozomemein/rigor-module-graph/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nozomemein/rigor-module-graph/actions/workflows/ci.yml)
 [![Docs](https://github.com/nozomemein/rigor-module-graph/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/nozomemein/rigor-module-graph/actions/workflows/docs.yml)
 
-Class/module/constant dependency graph for Ruby projects, built on
-[Rigor](https://rigor.typedduck.fail/). The class-level counterpart
-to Packwerk/Graphwerk: where those look at package boundaries, this
-looks at the Ruby nominal graph — inheritance, `include`/`prepend`/
-`extend`, and (later) constant references.
+Class/module/constant dependency graph for Ruby projects,
+built on [Rigor](https://rigor.typedduck.fail/). Surfaces the
+Ruby nominal graph — inheritance, `include` / `prepend` /
+`extend`, Rails associations, and (optionally) constant
+references inside method bodies — so the structural shape of
+an `app/` is readable straight from the source.
+
+For how this sits next to package-boundary tools and call
+graphs, see
+[Why this design vs. the alternatives](docs/how-it-works.md#why-this-design-vs-the-alternatives).
 
 **Two ways to look at the same graph.** Static SVG via
 Graphviz for committing into PRs and docs; interactive HTML
@@ -74,8 +79,9 @@ for the pipeline overview.
 ## Getting started
 
 The default subcommand analyses the current directory, writes
-a self-contained Mermaid HTML report under
-`.rigor/module_graph/`, and opens it in a browser:
+a self-contained interactive HTML report (Cytoscape.js,
+vendored) under `.rigor/module_graph/`, and opens it in a
+browser:
 
 ```sh
 cd path/to/your/project
